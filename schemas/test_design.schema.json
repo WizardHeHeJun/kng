@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Test Design Output",
+  "type": "object",
+  "required": [
+    "feature_name",
+    "test_points",
+    "test_cases",
+    "risks",
+    "clarifications"
+  ],
+  "properties": {
+    "feature_name": { "type": "string" },
+    "test_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "type": "string" }
+        }
+      }
+    },
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "preconditions", "steps", "expected", "priority"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "preconditions": { "type": "array", "items": { "type": "string" } },
+          "steps": { "type": "array", "items": { "type": "string" } },
+          "expected": { "type": "string" },
+          "priority": { "type": "string" },
+          "related_points": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "item", "reason"],
+        "properties": {
+          "level": { "type": "string" },
+          "item": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "clarifications": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": { "type": "string" },
+          "path": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

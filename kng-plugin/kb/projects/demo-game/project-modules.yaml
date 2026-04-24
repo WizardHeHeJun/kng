@@ -1,0 +1,28 @@
+# Project Module Registry & Knowledge Graph — 项目模块索引与知识图谱
+# 此文件由 /kng-init 或 /kng-kb import 自动生成和维护
+# 包含两部分：
+#   1. modules  — 业务模块定义（节点）
+#   2. relations — 模块间关联关系（边）：依赖、数据流、触发、共享状态
+#
+# 知识图谱用途：
+#   - /kng-test: 为目标模块自动拉取关联模块的 KB，生成集成测试点
+#   - /kng-kb import: 导入文档时自动发现跨系统引用，添加新边
+#   - /kng-evolve: 跨系统 bug 反馈自动更新边的 risk_level
+#   - retrieve_kb.py: 检索时 boost 关联模块的 KB 文件
+
+auto_detect: true
+
+modules: []
+
+# 关系类型说明：
+#   depends_on  — A 的逻辑依赖 B 的数据或状态 (如：战斗依赖装备属性)
+#   feeds_into  — A 的输出是 B 的输入 (如：任务完成 → 触发奖励发放)
+#   shares_state — A 和 B 读写同一份数据 (如：背包和商城共享道具库存)
+#   triggers    — A 的事件触发 B 的流程 (如：升级触发新任务解锁)
+#
+# risk_level: high / medium / low — 此耦合点的测试风险等级
+# test_focus: 在此边界需要重点测试的场景列表
+
+relations: []
+
+fallback_module: general

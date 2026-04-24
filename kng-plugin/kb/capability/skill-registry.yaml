@@ -1,0 +1,61 @@
+# Skill Registry — 能力库索引
+# 定义每个 skill 的覆盖范围、标签、以及常见的组合场景
+# retrieve_kb.py 会读取此文件进行路由，而不仅靠关键词匹配
+
+skills:
+  - id: test-design-guidelines
+    file: test-design-guidelines.md
+    name: 测试设计通用规范
+    tags: [测试设计, 测试点, 用例设计, 优先级, 覆盖度, 评审]
+    covers:
+      - 功能路径覆盖
+      - 边界值设计
+      - 异常流程设计
+      - 状态流转验证
+      - 权限校验
+      - 优先级分配
+
+  - id: api-test-script-playbook
+    file: api-test-script-playbook.md
+    name: 接口自动化脚本规范
+    tags: [接口测试, API, 自动化, 脚本, 回归, 冒烟]
+    covers:
+      - 接口参数校验
+      - 权限验证 (401/403)
+      - 幂等性测试
+      - 服务降级与超时
+      - 断言规范
+      - 脚本组织结构
+
+# 场景组合模板 — 描述常见测试场景需要哪些 skill 组合
+scenarios:
+  - name: 奖励/支付结算测试
+    description: 涉及金额、道具发放、结算的场景
+    required_skills: [test-design-guidelines, api-test-script-playbook]
+    extra_tags: [并发, 幂等, 重复领取, 断线重连, 金额校验]
+    test_focus:
+      - 并发领取幂等性
+      - 断线重连后重复结算
+      - 金额边界值 (0, 负数, 上限)
+      - 多端同时操作
+
+  - name: 配置热更新测试
+    description: 运营配置变更后的数据一致性
+    required_skills: [test-design-guidelines]
+    extra_tags: [热更新, 配置, 数据一致性, 缓存]
+    test_focus:
+      - 新旧配置切换时机
+      - 缓存失效策略
+      - 缺省字段兜底
+      - 多语言字段完整性
+
+  - name: 状态机/流程测试
+    description: 有状态流转的业务 (任务、战斗、交易)
+    required_skills: [test-design-guidelines, api-test-script-playbook]
+    extra_tags: [状态机, 流转, 并发, 回退, 超时]
+    test_focus:
+      - 状态流转完整性
+      - 非法状态跳转
+      - 并发状态修改
+      - 超时回退机制
+      - 状态持久化与恢复
