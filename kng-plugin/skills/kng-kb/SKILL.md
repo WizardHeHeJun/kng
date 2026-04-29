@@ -19,6 +19,12 @@ Before parsing sub-commands, resolve the active project knowledge base.
 
 Set defaults:
 - `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
+- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+
+### Storage Mode Detection
+
+Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+In DB mode, list/add/import operations go through `db.py` and `kb_import.py` scripts instead of direct file manipulation. The flat KB files still exist as source-of-truth for version control; the DB is a derived index.
 
 **If `--project <id>` was provided in any sub-command:**
 - Use that project for THIS invocation only (do NOT update `active_project` in config).
@@ -53,13 +59,21 @@ List all knowledge base files.
 
 ### Steps
 
+#### File mode:
+
 1. **Capability KB**: Use Glob to find all files in `${CLAUDE_PLUGIN_ROOT}/kb/capability/`. List each file with its size and first-line summary.
 
 2. **Project KB**: Read `kng.config.json` to find `kb_root` (default `./kb`). Use Glob to find all files under `${KB_ROOT}/projects/`. Group by project.
 
 3. **Module index**: If `project-modules.yaml` exists for a project, read it and show the registered modules.
 
-4. **Output**: Print a structured summary:
+#### DB mode:
+
+1. Run `python "${CLAUDE_PLUGIN_ROOT}/scripts/db.py" stats --db "${DB_PATH}"` to get counts.
+2. Query the DB programmatically or list entries via the script output. The DB stores KB entries with `kb_type` (capability/project), `module_id`, `entry_type`, and `source_file`.
+3. Module index is read from the `modules` table in the DB.
+
+#### Output (both modes):
    ```
    ## 基础能力库 (${CLAUDE_PLUGIN_ROOT}/kb/capability/)
    - test-design-guidelines.md (23 lines) — 测试设计通用规范
@@ -99,7 +113,16 @@ Interactively create a new knowledge base entry.
 6. Write the file:
    - capability → `${CLAUDE_PLUGIN_ROOT}/kb/capability/<filename>.md`
    - project → `${KB_ROOT}/projects/<project-id>/<filename>.md`
-7. Confirm the file was created, show its path and detected module.
+7. **DB mode sync**: If in DB mode, after writing the file, re-import it into the database:
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
+     --db "${DB_PATH}" \
+     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
+     --project-id "${PROJECT_ID}" --force
+   ```
+   This keeps the DB index in sync with the flat files.
+8. Confirm the file was created, show its path and detected module.
 
 ---
 
@@ -195,7 +218,16 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 
    Write to: `${KB_ROOT}/projects/<project-id>/<filename>.md`
 
-7. **Report**: Show:
+7. **DB mode sync**: If in DB mode, after writing the KB file and updating `project-modules.yaml`, re-import to keep the DB in sync:
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
+     --db "${DB_PATH}" \
+     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
+     --project-id "${PROJECT_ID}" --force
+   ```
+
+8. **Report**: Show:
    - Saved file path
    - Detected/discovered module (with tag list if new)
    - Content summary (key sections, number of business rules extracted)

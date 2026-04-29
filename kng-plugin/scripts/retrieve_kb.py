@@ -40,9 +40,10 @@ def read_kb_files(root: pathlib.Path) -> List[Tuple[pathlib.Path, str]]:
     if not root.exists():
         return []
     exts = {".md", ".txt", ".json", ".yaml", ".yml"}
+    skip_names = {"synonym-aliases.yaml", "skill-registry.yaml", "project-modules.yaml", "CLAUDE.md"}
     pairs: List[Tuple[pathlib.Path, str]] = []
     for p in root.rglob("*"):
-        if p.is_file() and p.suffix.lower() in exts:
+        if p.is_file() and p.suffix.lower() in exts and p.name not in skip_names:
             try:
                 pairs.append((p, p.read_text(encoding="utf-8")))
             except Exception:
@@ -60,6 +61,64 @@ def load_registry(capability_dir: pathlib.Path) -> Dict[str, Any]:
         return parse_simple_yaml(content)
     except Exception:
         return {}
+
+
+def load_synonyms(capability_dir: pathlib.Path) -> Dict[str, Set[str]]:
+    """Load synonym-aliases.yaml. Returns inverted index: term -> set of all synonyms."""
+    syn_path = capability_dir / "synonym-aliases.yaml"
+    if not syn_path.exists():
+        return {}
+    try:
+        content = syn_path.read_text(encoding="utf-8")
+        return parse_synonym_yaml(content)
+    except Exception:
+        return {}
+
+
+def parse_synonym_yaml(text: str) -> Dict[str, Set[str]]:
+    """Parse synonym-aliases.yaml into an inverted index: each term -> its full synonym group."""
+    synonym_map: Dict[str, Set[str]] = {}
+    current_terms: List[str] = []
+    in_groups = False
+
+    for raw_line in text.split("\n"):
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("groups:"):
+            in_groups = True
+            continue
+        if not in_groups:
+            continue
+
+        if stripped.startswith("- name:"):
+            if current_terms:
+                term_set = set(current_terms)
+                for t in current_terms:
+                    synonym_map[t] = term_set
+            current_terms = []
+            continue
+
+        if stripped.startswith("terms:"):
+            val = stripped.partition(":")[2].strip()
+            if val.startswith("[") and val.endswith("]"):
+                current_terms = [s.strip().strip("'\"") for s in val[1:-1].split(",") if s.strip()]
+
+    if current_terms:
+        term_set = set(current_terms)
+        for t in current_terms:
+            synonym_map[t] = term_set
+
+    return synonym_map
+
+
+def expand_keywords(keywords: Set[str], synonym_map: Dict[str, Set[str]]) -> Set[str]:
+    """Expand query keywords with their synonyms."""
+    expanded = set(keywords)
+    for kw in keywords:
+        if kw in synonym_map:
+            expanded |= synonym_map[kw]
+    return expanded
 
 
 def parse_simple_yaml(text: str) -> Dict[str, Any]:
@@ -84,6 +143,8 @@ def parse_simple_yaml(text: str) -> Dict[str, Any]:
             indent_stack = [indent]
             continue
         if stripped.startswith("scenarios:"):
+            if current_item and current_list_key:
+                result[current_list_key].append(current_item)
             current_list_key = "scenarios"
             current_item = {}
             indent_stack = [indent]
@@ -121,9 +182,22 @@ def parse_simple_yaml(text: str) -> Dict[str, Any]:
     return result
 
 
-def match_scenarios(query_keywords: Set[str], registry: Dict[str, Any]) -> Dict[str, float]:
-    """Match query against registry scenarios, return file->boost_score mapping."""
+def substring_match_score(keywords: Set[str], normalized_text: str) -> float:
+    """Score unmatched keywords by substring presence in text. Returns 0.5 per hit."""
+    score = 0.0
+    for kw in keywords:
+        if len(kw) >= 2 and kw in normalized_text:
+            score += 0.5
+    return score
+
+
+def match_scenarios(
+    query_keywords: Set[str], registry: Dict[str, Any],
+    original_keyword_count: int = 0,
+) -> Tuple[Dict[str, float], List[Dict[str, Any]]]:
+    """Match query against registry scenarios. Returns (file->boost_score, matched_scenario_details)."""
     boosts: Dict[str, float] = {}
+    matched: List[Dict[str, Any]] = []
     scenarios = registry.get("scenarios", [])
     skills_index = {s.get("id", ""): s for s in registry.get("skills", [])}
 
@@ -135,15 +209,32 @@ def match_scenarios(query_keywords: Set[str], registry: Dict[str, Any]) -> Dict[
             scenario_tags.update(extract_keywords(focus))
 
         overlap = len(query_keywords & scenario_tags)
-        if overlap < 2:
+        scenario_text = normalize_text(
+            scenario.get("name", "") + " " +
+            scenario.get("description", "") + " " +
+            " ".join(scenario.get("extra_tags", [])) + " " +
+            " ".join(scenario.get("test_focus", []))
+        )
+        substr_hits = substring_match_score(query_keywords - scenario_tags, scenario_text)
+        effective_overlap = overlap + substr_hits
+
+        kw_count = original_keyword_count if original_keyword_count > 0 else len(query_keywords)
+        min_overlap = max(1, min(2, kw_count // 2))
+        if effective_overlap < min_overlap:
             continue
 
-        boost = overlap * 3
+        boost = effective_overlap * 3
         for skill_id in scenario.get("required_skills", []):
             skill = skills_index.get(skill_id, {})
             skill_file = skill.get("file", "")
             if skill_file:
                 boosts[skill_file] = boosts.get(skill_file, 0) + boost
+
+        matched.append({
+            "name": scenario.get("name", ""),
+            "required_skills": scenario.get("required_skills", []),
+            "test_focus": scenario.get("test_focus", []),
+        })
 
     for skill in registry.get("skills", []):
         skill_tags = set(skill.get("tags", []))
@@ -155,7 +246,7 @@ def match_scenarios(query_keywords: Set[str], registry: Dict[str, Any]) -> Dict[
             if skill_file:
                 boosts[skill_file] = boosts.get(skill_file, 0) + overlap * 2
 
-    return boosts
+    return boosts, matched
 
 
 def load_project_modules(project_dir: pathlib.Path) -> Dict[str, Any]:
@@ -300,12 +391,21 @@ def retrieve_top_k(
     module_prefix: str = None,
     module_boost: float = 0.0,
     related_prefixes: Dict[str, float] = None,
+    synonym_map: Dict[str, Set[str]] = None,
 ) -> List[Dict[str, Any]]:
     qk = extract_keywords(query_text)
+    if synonym_map:
+        qk = expand_keywords(qk, synonym_map)
     scored: List[Tuple[pathlib.Path, str, float]] = []
     for path, content in docs:
-        ck = extract_keywords(content[:12000])
-        score = float(len(qk & ck))
+        ck = extract_keywords(content)
+        intersection_count = len(qk & ck)
+        query_coverage = intersection_count / max(len(qk), 1)
+        score = intersection_count + query_coverage * 2.0
+
+        unmatched = qk - ck
+        if unmatched:
+            score += substring_match_score(unmatched, normalize_text(content))
 
         if boosts:
             for filename, boost in boosts.items():
@@ -334,33 +434,29 @@ def retrieve_top_k(
     return results
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="KNG knowledge base retrieval")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--query", help="Query text to match against")
-    group.add_argument("--query-file", help="File containing query text (use /dev/stdin for pipe)")
-    parser.add_argument("--capability-dir", required=True, help="Path to capability KB directory")
-    parser.add_argument("--project-dir", required=True, help="Path to project KB directory")
-    parser.add_argument("--top-k", type=int, default=5, help="Number of top results per KB")
-    args = parser.parse_args()
-
+def _resolve_query(args) -> str:
     if args.query:
-        query_text = args.query
-    else:
-        if str(args.query_file) in ("/dev/stdin", "-"):
-            query_text = sys.stdin.read()
-        else:
-            query_text = pathlib.Path(args.query_file).read_text(encoding="utf-8")
+        return args.query
+    if str(args.query_file) in ("/dev/stdin", "-"):
+        return sys.stdin.read()
+    return pathlib.Path(args.query_file).read_text(encoding="utf-8")
 
+
+def main_file_mode(args) -> int:
+    query_text = _resolve_query(args)
     cap_dir = pathlib.Path(args.capability_dir)
     proj_dir = pathlib.Path(args.project_dir)
 
     registry = load_registry(cap_dir)
+    synonym_map = load_synonyms(cap_dir)
     query_kw = extract_keywords(query_text)
-    boosts = match_scenarios(query_kw, registry) if registry else {}
+    query_kw_expanded = expand_keywords(query_kw, synonym_map) if synonym_map else query_kw
+    boosts, matched_scenarios = match_scenarios(
+        query_kw_expanded, registry, original_keyword_count=len(query_kw)
+    ) if registry else ({}, [])
 
     project_modules = load_project_modules(proj_dir)
-    mod_id, mod_name, mod_score = detect_module(query_kw, project_modules, raw_query=query_text)
+    mod_id, mod_name, mod_score = detect_module(query_kw_expanded, project_modules, raw_query=query_text)
     module_prefix = mod_id if mod_id != "general" and mod_score >= 2 else None
     module_boost = mod_score * 2 if module_prefix else 0.0
 
@@ -370,54 +466,137 @@ def main() -> int:
     cap_docs = read_kb_files(cap_dir)
     proj_docs = read_kb_files(proj_dir)
 
-    cap_hits = retrieve_top_k(query_text, cap_docs, args.top_k, boosts)
+    cap_hits = retrieve_top_k(query_text, cap_docs, args.top_k, boosts,
+                              synonym_map=synonym_map)
     proj_hits = retrieve_top_k(query_text, proj_docs, args.top_k,
                                module_prefix=module_prefix, module_boost=module_boost,
-                               related_prefixes=related_prefixes)
-
-    matched_scenarios = []
-    if registry:
-        for scenario in registry.get("scenarios", []):
-            stags = set(scenario.get("extra_tags", []))
-            stags.update(extract_keywords(scenario.get("name", "")))
-            if len(query_kw & stags) >= 2:
-                matched_scenarios.append({
-                    "name": scenario.get("name", ""),
-                    "required_skills": scenario.get("required_skills", []),
-                    "test_focus": scenario.get("test_focus", []),
-                })
+                               related_prefixes=related_prefixes,
+                               synonym_map=synonym_map)
 
     output = {
         "capability_hits": cap_hits,
         "project_hits": proj_hits,
         "matched_scenarios": matched_scenarios,
-        "detected_module": {
-            "id": mod_id,
-            "name": mod_name,
-            "score": mod_score,
-        },
+        "detected_module": {"id": mod_id, "name": mod_name, "score": mod_score},
         "related_modules": [
-            {
-                "module_id": r["module_id"],
-                "relation_type": r["relation_type"],
-                "description": r["description"],
-                "risk_level": r["risk_level"],
-                "test_focus": r["test_focus"],
-            }
+            {"module_id": r["module_id"], "relation_type": r["relation_type"],
+             "description": r["description"], "risk_level": r["risk_level"],
+             "test_focus": r["test_focus"]}
             for r in related
         ],
         "stats": {
+            "storage_mode": "file",
             "capability_files": len(cap_docs),
             "project_files": len(proj_docs),
             "query_keywords": len(query_kw),
+            "query_keywords_expanded": len(query_kw_expanded),
+            "synonym_expansions": len(query_kw_expanded) - len(query_kw),
             "registry_boosts": len(boosts),
             "module_boost_applied": module_prefix is not None,
             "related_modules_boosted": len(related_prefixes),
         },
     }
-
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
+
+
+def main_db_mode(args) -> int:
+    from db import KngDatabase
+
+    query_text = _resolve_query(args)
+    project_id = args.project
+
+    db = KngDatabase(args.db)
+    db.connect()
+    db.initialize()
+
+    query_kw = extract_keywords(query_text)
+    synonym_map = db.load_synonym_map()
+    query_kw_expanded = expand_keywords(query_kw, synonym_map) if synonym_map else query_kw
+
+    boosts, matched_scenarios = db.match_scenarios(
+        query_kw_expanded, original_keyword_count=len(query_kw)
+    )
+
+    mod_id, mod_name, mod_score = db.detect_module(
+        query_kw_expanded, project_id, raw_query=query_text
+    )
+    module_prefix = mod_id if mod_id != "general" and mod_score >= 2 else None
+    module_boost = mod_score * 2 if module_prefix else 0.0
+
+    related = db.find_related_modules(project_id, mod_id) if module_prefix else []
+    related_prefixes = {r["module_id"]: r["boost"] for r in related}
+
+    mode = getattr(args, "mode", "keyword")
+
+    if mode == "fts":
+        cap_hits = db.search_kb_fts(query_text, kb_type="capability", top_k=args.top_k)
+        proj_hits = db.search_kb_fts(query_text, kb_type="project",
+                                      project_id=project_id, top_k=args.top_k)
+    else:
+        cap_hits = db.search_kb_keyword(
+            query_kw_expanded, "capability", top_k=args.top_k, boosts=boosts,
+        )
+        proj_hits = db.search_kb_keyword(
+            query_kw_expanded, "project", project_id=project_id, top_k=args.top_k,
+            module_prefix=module_prefix, module_boost=module_boost,
+            related_prefixes=related_prefixes,
+        )
+
+    cap_count = len(db.list_kb_entries(kb_type="capability"))
+    proj_count = len(db.list_kb_entries(project_id=project_id, kb_type="project"))
+
+    output = {
+        "capability_hits": cap_hits,
+        "project_hits": proj_hits,
+        "matched_scenarios": matched_scenarios,
+        "detected_module": {"id": mod_id, "name": mod_name, "score": mod_score},
+        "related_modules": [
+            {"module_id": r["module_id"], "relation_type": r["relation_type"],
+             "description": r["description"], "risk_level": r["risk_level"],
+             "test_focus": r["test_focus"]}
+            for r in related
+        ],
+        "stats": {
+            "storage_mode": "sqlite",
+            "search_mode": mode,
+            "capability_files": cap_count,
+            "project_files": proj_count,
+            "query_keywords": len(query_kw),
+            "query_keywords_expanded": len(query_kw_expanded),
+            "synonym_expansions": len(query_kw_expanded) - len(query_kw),
+            "registry_boosts": len(boosts),
+            "module_boost_applied": module_prefix is not None,
+            "related_modules_boosted": len(related_prefixes),
+        },
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    db.close()
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="KNG knowledge base retrieval")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--query", help="Query text to match against")
+    group.add_argument("--query-file", help="File containing query text (use /dev/stdin for pipe)")
+    parser.add_argument("--capability-dir", help="Path to capability KB directory (file mode)")
+    parser.add_argument("--project-dir", help="Path to project KB directory (file mode)")
+    parser.add_argument("--db", help="Path to SQLite database (db mode)")
+    parser.add_argument("--project", help="Project ID (required in db mode)")
+    parser.add_argument("--mode", choices=["keyword", "fts"], default="keyword",
+                        help="Search mode in db mode")
+    parser.add_argument("--top-k", type=int, default=5, help="Number of top results per KB")
+    args = parser.parse_args()
+
+    if args.db:
+        if not args.project:
+            parser.error("--project is required when using --db")
+        return main_db_mode(args)
+    else:
+        if not args.capability_dir or not args.project_dir:
+            parser.error("--capability-dir and --project-dir are required in file mode")
+        return main_file_mode(args)
 
 
 if __name__ == "__main__":

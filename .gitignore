@@ -1,25 +1,19 @@
+# ── 只保留 kng-plugin（插件本体），其余全部忽略 ──
+# 通过 npx @anthropic-ai/claude-code-plugin install 即可下载使用
+
+# 忽略根目录所有内容，再白名单放行插件
+/*
+!kng-plugin/
+!.gitignore
+!README.md
+!LICENSE
+
+# ── 插件目录内的忽略规则 ──
+
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
-*.egg-info/
-dist/
-build/
-*.egg
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Test output (generated per run)
-test-output/
-
-# User-specific config
-kng.config.json
-
-# Claude Code session data
-.claude/
 
 # Node
 node_modules/
@@ -36,5 +30,11 @@ Desktop.ini
 *.swo
 *~
 
+# Database
+*.db
+
 # Logs
 *.log
+
+# Claude Code session data
+.claude/

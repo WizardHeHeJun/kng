@@ -1,15 +1,20 @@
-# Lark Test Agent (MVP)
+# KNG — Knowledge-driven Next-Gen Test Agent
 
-一个最小可运行工具：输入飞书文档 URL，自动读取内容并生成测试设计产出。
-同时提供双知识库版本（基础能力库 + 项目知识库），支持多项目复用。
+基于双知识库（能力库 + 项目库）的智能测试设计系统。输入飞书策划案文档，自动匹配知识库上下文，生成结构化测试设计。
+
+支持两种存储模式：
+- **文件模式**：YAML + Markdown 扁平文件，适合小型项目
+- **SQLite 模式**：结构化数据库 + FTS5 全文检索，适合大型项目（百级策划案、多模块关联）
 
 ## 1. 前置条件
 
-- 已安装 Python 3.10+
-- 已安装 `lark-cli`
-- 已完成飞书授权（建议 user 身份）：
-  - `lark-cli config init --new`
-  - `lark-cli auth login --scope "drive:drive:readonly docs:document:readonly wiki:wiki:readonly"`
+- Python 3.10+（SQLite 为 stdlib，无需额外安装）
+- `lark-cli`（飞书文档抓取）
+- 飞书授权（建议 user 身份）：
+  ```bash
+  lark-cli config init --new
+  lark-cli auth login --scope “drive:drive:readonly docs:document:readonly wiki:wiki:readonly”
+  ```
 
 ## 2. 安装依赖
 
@@ -17,44 +22,124 @@
 pip install -r requirements.txt
 ```
 
-## 3. 运行
+## 3. Claude Code 插件使用（推荐）
+
+KNG 作为 Claude Code 插件运行，通过 slash command 驱动：
+
+| 命令 | 功能 |
+|------|------|
+| `/kng-init <project-id>` | 初始化项目知识库 + 数据库 |
+| `/kng-test <feishu-url>` | 从飞书文档生成测试设计 |
+| `/kng-kb list\|add\|import` | 管理知识库条目 |
+| `/kng-evolve` | 反馈学习，进化知识库 |
+| `/kng-select <project-id>` | 切换当前活跃项目 |
+
+### 快速开始
 
 ```bash
-python tools/lark_test_agent.py --url "https://your-domain.feishu.cn/docx/xxxxxxxx"
+# 1. 初始化项目（自动创建 DB）
+/kng-init my-game --from-lark <总览文档URL>
+
+# 2. 导入策划案
+/kng-kb import --from-lark <策划案URL> --type project
+
+# 3. 生成测试设计
+/kng-test <策划案URL>
+
+# 4. 反馈学习
+/kng-evolve
 ```
 
-可选参数：
+## 4. 独立脚本使用
 
-- `--identity user|bot` (默认 `user`)
-- `--output-dir test-output` (默认 `test-output`)
-- `--model gpt-4.1-mini` (默认 `gpt-4.1-mini`)
-
-## 3.1 双知识库运行（推荐）
+### 4.1 单文档版本
 
 ```bash
-python tools/dual_kb_test_agent.py --project-id demo-game --url "https://your-domain.feishu.cn/docx/xxxxxxxx"
+python tools/lark_test_agent.py --url “https://your-domain.feishu.cn/docx/xxxxxxxx”
 ```
 
-可选参数：
-
-- `--kb-root kb`（知识库根目录）
-- `--top-k 5`（每个知识库命中条数）
-- `--identity user|bot`
-- `--model gpt-4.1-mini`
-
-## 3.2 一键验证（给新人）
+### 4.2 双知识库版本
 
 ```bash
-validate_run.bat demo-game "https://your-domain.feishu.cn/docx/xxxxxxxx"
+python tools/dual_kb_test_agent.py --project-id demo-game --url “https://your-domain.feishu.cn/docx/xxxxxxxx”
 ```
 
-如果不传 URL，脚本会提示你粘贴文档链接：
+### 4.3 一键验证
 
 ```bash
-validate_run.bat demo-game
+validate_run.bat demo-game “https://your-domain.feishu.cn/docx/xxxxxxxx”
 ```
 
-## 4. 输出
+## 5. SQLite 存储层
+
+大型项目推荐启用 SQLite 模式，支持结构化查询、全文检索和模块关联图谱。
+
+### 数据库管理
+
+```bash
+# 初始化数据库
+python kng-plugin/scripts/db.py init --db ./kng.db
+
+# 导入现有知识
+python kng-plugin/scripts/kb_import.py \
+  --db ./kng.db \
+  --capability-dir kng-plugin/kb/capability \
+  --project-dir kb/projects/demo-game \
+  --project-id demo-game --verbose
+
+# 查看统计
+python kng-plugin/scripts/db.py stats --db ./kng.db
+```
+
+### 知识检索（双模式）
+
+```bash
+# 文件模式
+python kng-plugin/scripts/retrieve_kb.py \
+  --query “并发 幂等” \
+  --capability-dir kng-plugin/kb/capability \
+  --project-dir kb/projects/demo-game
+
+# DB 模式（关键词匹配）
+python kng-plugin/scripts/retrieve_kb.py \
+  --query “并发 幂等” \
+  --db ./kng.db --project demo-game --mode keyword
+
+# DB 模式（全文检索）
+python kng-plugin/scripts/retrieve_kb.py \
+  --query “并发 幂等” \
+  --db ./kng.db --project demo-game --mode fts
+```
+
+### 数据库 Schema（10 张表）
+
+| 表 | 用途 |
+|----|------|
+| `projects` | 项目元数据 |
+| `modules` | 业务模块注册 |
+| `module_relations` | 模块间关联图谱（depends_on / feeds_into / shares_state / triggers） |
+| `kb_entries` + `kb_entries_fts` | 知识条目 + FTS5 全文索引 |
+| `skills` / `skill_scenarios` | 技能注册表 + 场景模板 |
+| `synonyms` | 同义词/别名组 |
+| `test_designs` | 测试设计产出追踪 |
+| `learning_feedback` | 学习反馈记录 |
+
+## 6. 配置文件
+
+`kng.config.json`（工作区根目录）：
+
+```json
+{
+  “active_project”: “demo-game”,
+  “kb_root”: “./kb”,
+  “output_dir”: “./test-output”,
+  “db_path”: “./kng.db”
+}
+```
+
+- `db_path` 为可选字段，存在且文件有效时启用 SQLite 模式，否则使用文件模式
+
+## 7. 输出
 
 默认输出到 `test-output/`：
 
@@ -62,28 +147,32 @@ validate_run.bat demo-game
 - `*-test-design.json`：结构化测试产出
 - `*-test-design.md`：可读版测试设计
 
-## 5. AI 生成模式
-
-- 设置了 `OPENAI_API_KEY` 时：调用 OpenAI 生成高质量测试产出
-- 未设置时：自动降级为模板化 fallback，也会给出可评审初稿
-
-## 6. 下一步建议
-
-- 把 JSON 结果接入 TestRail/Jira
-- 增加“回归建议生成”和“覆盖率缺口检查”
-- 增加飞书文档回写（自动写入评审文档）
-
-## 7. 双知识库目录
+## 8. 项目目录
 
 ```text
+kng-plugin/
+  kb/capability/                # 通用测试能力库（跨项目复用）
+    skill-registry.yaml         # 技能注册表
+    synonym-aliases.yaml        # 同义词配置
+    test-design-guidelines.md   # 测试设计规范
+    api-test-script-playbook.md # 接口脚本手册
+  scripts/
+    retrieve_kb.py              # 知识检索引擎（文件/DB 双模式）
+    db.py                       # SQLite 数据库抽象层
+    kb_import.py                # 批量导入工具
+  skills/
+    kng-test/                   # 测试设计生成
+    kng-kb/                     # 知识库管理
+    kng-evolve/                 # 反馈学习进化
+    kng-init/                   # 项目初始化
+    kng-select/                 # 项目切换
 kb/
-  capability/                 # 通用测试能力库（跨项目复用）
   projects/
-    demo-game/                # 项目知识库（按项目隔离）
+    demo-game/                  # 项目知识库（按项目隔离）
 schemas/
-  test_design.schema.json
+  test_design.schema.json       # 测试设计 JSON Schema
 tools/
-  lark_test_agent.py          # 单文档版本
-  dual_kb_test_agent.py       # 双知识库版本
-validate_run.bat              # 一键验证入口
+  lark_test_agent.py            # 单文档版本
+  dual_kb_test_agent.py         # 双知识库版本
+validate_run.bat                # 一键验证入口
 ```

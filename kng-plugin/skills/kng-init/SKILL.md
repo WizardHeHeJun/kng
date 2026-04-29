@@ -254,19 +254,54 @@ If `kng.config.json` does not exist, create it:
 {
   "active_project": "${PROJECT_ID}",
   "kb_root": "./kb",
-  "output_dir": "./test-output"
+  "output_dir": "./test-output",
+  "db_path": "./kng.db"
 }
 ```
 
-If it already exists, update the `active_project` field to `${PROJECT_ID}` using Edit tool. Preserve all other fields. If there is a legacy `default_project` field, update it as well to keep in sync.
+If it already exists, update the `active_project` field to `${PROJECT_ID}` using Edit tool. Preserve all other fields. If there is a legacy `default_project` field, update it as well to keep in sync. If `db_path` is not yet present, add it with value `"./kng.db"`.
 
 This ensures that subsequent `/kng-test`, `/kng-kb`, `/kng-evolve` invocations automatically use the newly created project without requiring `--project`.
+
+## Step 7b: Initialize & Populate Database
+
+Initialize the SQLite database and import all flat KB files into it. This enables faster retrieval and structured queries for large projects.
+
+1. **Initialize the database**:
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/db.py" init --db "${DB_PATH}"
+   ```
+
+2. **Import capability KB** (universal test methodology):
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
+     --db "${DB_PATH}" \
+     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --verbose
+   ```
+
+3. **Import project KB** (newly created project files):
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
+     --db "${DB_PATH}" \
+     --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
+     --project-id "${PROJECT_ID}" \
+     --verbose
+   ```
+
+4. **Verify** with stats:
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/db.py" stats --db "${DB_PATH}"
+   ```
+
+If any step fails, warn the user but do NOT block the init — the flat files are always the source of truth and file mode will still work.
 
 ## Step 8: Report
 
 Print a summary:
 - Created directory path
 - List of files generated
+- Database status: initialized at `${DB_PATH}`, number of imported entries
 - **If document-driven mode**: show discovered modules and relations:
   ```
   发现 {N} 个业务模块：

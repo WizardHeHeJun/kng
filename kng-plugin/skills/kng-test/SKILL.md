@@ -20,6 +20,12 @@ Extract from `$ARGUMENTS`:
 Set defaults:
 - `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
 - `OUTPUT_DIR` = `./test-output` (or from `kng.config.json` → `output_dir`)
+- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+
+### Storage Mode Detection
+
+Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+All subsequent KB operations branch on this. DB mode uses `retrieve_kb.py --db` and `db.py`; file mode uses flat files as before.
 
 ### Project Context Protocol (shared across all KNG skills)
 
@@ -56,6 +62,8 @@ Capture the stdout as the document content. If the command fails:
 
 ## Step 2: Retrieve Knowledge Base Context
 
+### File mode (no `db_path` in config):
+
 Run the KB retrieval script:
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
@@ -66,10 +74,23 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
   <<< "DOCUMENT_CONTENT_HERE"
 ```
 
-The script outputs JSON with:
-- `capability_hits`, `project_hits` — matched KB files
+### DB mode (`db_path` set in config):
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
+  --query-file /dev/stdin \
+  --db "${DB_PATH}" \
+  --project "${PROJECT_ID}" \
+  --mode keyword \
+  --top-k 5 \
+  <<< "DOCUMENT_CONTENT_HERE"
+```
+
+Both modes output the same JSON format with:
+- `capability_hits`, `project_hits` — matched KB entries
 - `detected_module` (with `id`, `name`, `score`) — which business module this document belongs to
 - `related_modules` — modules connected to the detected module via the knowledge graph, each with `relation_type`, `description`, `risk_level`, and `test_focus`
+- `stats` — includes `storage_mode: "file"` or `storage_mode: "sqlite"` to confirm which mode was used
 
 Parse all fields. The `detected_module` goes into output metadata. The `related_modules` are critical — they tell you which cross-system boundaries need integration testing.
 

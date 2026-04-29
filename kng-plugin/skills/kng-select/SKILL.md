@@ -19,18 +19,24 @@ Extract from `$ARGUMENTS`:
 
 Set defaults:
 - `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
+- `DB_PATH` = from `kng.config.json` → `db_path` (optional)
 
 ## Step 2: List Available Projects
 
+### File mode (no `db_path`):
 Use Glob to find all subdirectories in `${KB_ROOT}/projects/` that contain at least one `.md` or `.yaml` file (i.e., initialized project KBs).
 
+### DB mode (`db_path` set):
+Run `python "${CLAUDE_PLUGIN_ROOT}/scripts/db.py" stats --db "${DB_PATH}"` for overall counts. Additionally, query the DB for project list — the `projects` table has all registered projects with their metadata.
+
+### Both modes:
 Read `kng.config.json` to determine the currently active project (field: `active_project`, fallback to `default_project`).
 
-For each project found, read `project-overview.md` (first 5 lines) and `project-modules.yaml` to show:
+For each project found, show:
 - Project ID
 - Whether it's the currently active one (mark with `✦`)
 - Number of registered modules
-- Number of KB files
+- Number of KB entries (DB mode) or KB files (file mode)
 
 If `--list` was specified, display the list and stop here.
 
@@ -57,11 +63,12 @@ Read `kng.config.json` (or create if not exists). Set `active_project` to the se
 {
   "active_project": "<selected-project-id>",
   "kb_root": "./kb",
-  "output_dir": "./test-output"
+  "output_dir": "./test-output",
+  "db_path": "./kng.db"
 }
 ```
 
-If the config already exists, only update the `active_project` field using Edit tool — preserve all other fields.
+If the config already exists, only update the `active_project` field using Edit tool — preserve all other fields (including `db_path`).
 
 If there is a legacy `default_project` field, keep it in sync (set it to the same value).
 

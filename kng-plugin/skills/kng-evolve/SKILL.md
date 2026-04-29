@@ -17,6 +17,12 @@ Before gathering context, resolve the active project knowledge base.
 
 Set defaults:
 - `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
+- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+
+### Storage Mode Detection
+
+Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+In DB mode, feedback is persisted to the `learning_feedback` table via `db.py`, and KB file updates are synced back to the DB via `kb_import.py`.
 
 ### Project Context Protocol (shared across all KNG skills)
 
@@ -79,14 +85,20 @@ This surfaces past observations like "上次漏测了并发场景" or "结算接
 
 ### 1c. Load skill registry
 
-Read `${CLAUDE_PLUGIN_ROOT}/kb/capability/skill-registry.yaml` to understand:
+**File mode**: Read `${CLAUDE_PLUGIN_ROOT}/kb/capability/skill-registry.yaml` to understand:
 - Which skills exist and what they cover (`skills[].covers`)
 - Which scenario templates are defined (`scenarios[].test_focus`)
 - Tags for routing feedback to the right file
 
+**DB mode**: Query the `skills` and `skill_scenarios` tables from the DB. The data is equivalent — same fields, loaded from the same YAML during import.
+
 ### 1d. Load project module registry
 
-Read `${KB_ROOT}/projects/<project-id>/project-modules.yaml` to understand the project's module taxonomy:
+**File mode**: Read `${KB_ROOT}/projects/<project-id>/project-modules.yaml` to understand the project's module taxonomy.
+
+**DB mode**: Query the `modules` and `module_relations` tables for the active `PROJECT_ID`.
+
+In both modes you need:
 - Which business modules exist (`modules[].id`, `modules[].name`)
 - Each module's keyword tags (`modules[].tags`)
 - The fallback module for unclassified content
@@ -230,6 +242,33 @@ Show the user a summary of ALL proposed changes:
 ```
 
 Ask for confirmation. Then apply using Edit tool — append to existing sections, never overwrite.
+
+### DB mode: persist feedback & sync
+
+After applying file edits, if in DB mode:
+
+1. **Save feedback record** to the `learning_feedback` table via Bash:
+   ```bash
+   python -c "
+   import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts')
+   from db import KngDatabase
+   db = KngDatabase('${DB_PATH}'); db.connect(); db.initialize()
+   db.save_feedback('${FEEDBACK_TYPE}', '''${CONTENT}''',
+                    project_id='${PROJECT_ID}', module_id='${MODULE_ID}',
+                    routed_to=${ROUTED_FILES_JSON})
+   db.close()
+   "
+   ```
+   Where `FEEDBACK_TYPE` is one of: `missed_scenario`, `actual_bug`, `method_improvement`, `new_scenario`, `new_module`, `relation_update`.
+
+2. **Re-import** updated KB files and module registry to keep DB in sync:
+   ```bash
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
+     --db "${DB_PATH}" \
+     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
+     --project-id "${PROJECT_ID}" --force
+   ```
 
 ## Step 7: Summary
 
