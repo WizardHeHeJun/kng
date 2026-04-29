@@ -22,9 +22,33 @@
 pip install -r requirements.txt
 ```
 
-## 3. Claude Code 插件使用（推荐）
+## 3. Claude Code 插件安装
 
-KNG 作为 Claude Code 插件运行，通过 slash command 驱动：
+### 一键安装（推荐）
+
+```bash
+npx kng-plugin install
+```
+
+### 手动安装
+
+在 Claude Code 中执行（替换 `your-org/kng` 为你的 GitHub 用户名/仓库名）：
+
+```bash
+# 第一步：添加 marketplace
+/plugin marketplace add your-org/kng
+
+# 第二步：安装插件
+/plugin install kng@kng-marketplace
+```
+
+### 卸载
+
+```bash
+npx kng-plugin uninstall
+```
+
+安装后通过 slash command 驱动：
 
 | 命令 | 功能 |
 |------|------|

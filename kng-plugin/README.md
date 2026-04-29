@@ -4,12 +4,25 @@
 
 ## 安装
 
-```bash
-# 从 GitHub 安装
-claude plugin add github:your-org/kng-plugin
+### 一键安装
 
-# 本地开发安装
-claude plugin add /path/to/kng-plugin
+```bash
+npx kng-plugin install
+```
+
+### 手动安装
+
+在 Claude Code 中执行（替换 `your-org/kng` 为你的 GitHub 用户名/仓库名）：
+
+```bash
+/plugin marketplace add your-org/kng
+/plugin install kng@kng-marketplace
+```
+
+### 卸载
+
+```bash
+npx kng-plugin uninstall
 ```
 
 **前置要求**：

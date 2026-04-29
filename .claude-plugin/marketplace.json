@@ -1,0 +1,12 @@
+{
+  "name": "kng-marketplace",
+  "description": "KNG — Knowledge-driven Next-Gen Test Agent",
+  "plugins": [
+    {
+      "name": "kng",
+      "source": "./kng-plugin",
+      "description": "双知识库驱动的游戏测试设计工具",
+      "version": "1.0.0"
+    }
+  ]
+}

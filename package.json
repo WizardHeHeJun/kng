@@ -1,0 +1,29 @@
+{
+  "name": "kng-plugin",
+  "version": "1.0.0",
+  "description": "KNG — Knowledge-driven Next-Gen Test Agent for Claude Code",
+  "license": "MIT",
+  "bin": {
+    "kng-plugin": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "kng-plugin/",
+    ".claude-plugin/"
+  ],
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "testing",
+    "game-qa",
+    "knowledge-base",
+    "test-design"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/kng.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
