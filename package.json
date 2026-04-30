@@ -3,13 +3,25 @@
   "version": "1.0.0",
   "description": "KNG — Knowledge-driven Next-Gen Test Agent for Claude Code",
   "license": "MIT",
+  "author": {
+    "name": "KNG Team"
+  },
   "bin": {
     "kng-plugin": "./bin/cli.js"
   },
   "files": [
     "bin/",
-    "kng-plugin/",
-    ".claude-plugin/"
+    ".claude-plugin/",
+    "kng-plugin/.claude-plugin/",
+    "kng-plugin/CLAUDE.md",
+    "kng-plugin/package.json",
+    "kng-plugin/kb/capability/.gitkeep",
+    "kng-plugin/kb/capability/CLAUDE.md",
+    "kng-plugin/schemas/",
+    "kng-plugin/scripts/CLAUDE.md",
+    "kng-plugin/scripts/*.py",
+    "kng-plugin/scripts/Elysia.png",
+    "kng-plugin/skills/"
   ],
   "keywords": [
     "claude-code",
@@ -22,6 +34,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/WizardHeHeJun/kng.git"
+  },
+  "homepage": "https://github.com/WizardHeHeJun/kng#readme",
+  "bugs": {
+    "url": "https://github.com/WizardHeHeJun/kng/issues"
   },
   "engines": {
     "node": ">=18.0.0"

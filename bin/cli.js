@@ -52,6 +52,8 @@ function runClaude(args) {
 }
 
 function install() {
+  const useGithub = process.argv.includes("--from-github");
+
   log("Installing KNG plugin for Claude Code...\n");
 
   if (!findClaude()) {
@@ -65,8 +67,8 @@ function install() {
 
   success("Claude Code CLI detected.\n");
 
-  const source = REPO_URL;
-  log(`Using remote source: ${source}`);
+  const source = useGithub ? REPO_URL : PACKAGE_ROOT;
+  log(`Using ${useGithub ? "remote" : "local"} source: ${source}`);
 
   // Step 1: Add marketplace
   log("Adding KNG marketplace...");
@@ -146,9 +148,19 @@ function showHelp() {
 ${CYAN}KNG — Knowledge-driven Next-Gen Test Agent${RESET}
 
 Usage:
-  npx github:WizardHeHeJun/kng install      Install the plugin into Claude Code
-  npx github:WizardHeHeJun/kng uninstall    Remove the plugin from Claude Code
-  npx github:WizardHeHeJun/kng help         Show this help message
+  kng-plugin install                Install the plugin into Claude Code
+  kng-plugin install --from-github  Install using GitHub source (instead of local npm package)
+  kng-plugin uninstall              Remove the plugin from Claude Code
+  kng-plugin help                   Show this help message
+
+Install via npm (recommended):
+  npm install -g kng-plugin && kng-plugin install
+
+One-shot (no global install):
+  npx kng-plugin install
+
+Legacy (from GitHub directly):
+  npx github:WizardHeHeJun/kng install
 `);
 }
 

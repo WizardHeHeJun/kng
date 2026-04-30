@@ -22,9 +22,24 @@
 
 ## 2. 安装
 
-### 一键安装（推荐）
+### npm 全局安装（推荐）
 
 ```bash
+npm install -g kng-plugin
+kng-plugin install
+```
+
+### 一次性安装（无需全局）
+
+```bash
+npx kng-plugin install
+```
+
+### 从 GitHub 安装
+
+```bash
+npx kng-plugin install --from-github
+# 或直接
 npx github:WizardHeHeJun/kng install
 ```
 
@@ -45,7 +60,9 @@ npx github:WizardHeHeJun/kng install
 ### 卸载
 
 ```bash
-npx github:WizardHeHeJun/kng uninstall
+kng-plugin uninstall
+# 如果全局安装了，还需移除全局包：
+npm uninstall -g kng-plugin
 ```
 
 ## 3. 命令一览
