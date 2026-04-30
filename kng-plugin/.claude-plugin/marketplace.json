@@ -1,14 +1,14 @@
 {
-  "name": "kng-marketplace",
-  "owner": {
-    "name": "QA Team"
-  },
+  "version": "1",
   "plugins": [
     {
       "name": "kng",
-      "source": "./",
       "description": "Knowledge-driven Test Generator：双知识库驱动的游戏测试设计工具",
-      "version": "1.0.0"
+      "author": "QA Team",
+      "source": {
+        "source": "local",
+        "path": "./"
+      }
     }
   ]
 }
