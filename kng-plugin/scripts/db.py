@@ -23,7 +23,7 @@ import sqlite3
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS kb_entries (
     source_file     TEXT DEFAULT '',
     entry_type      TEXT DEFAULT 'general' CHECK (entry_type IN (
                         'requirement','architecture','test_point','issue',
-                        'guideline','playbook','general'
+                        'guideline','playbook','skill','general'
                     )),
     tags            TEXT DEFAULT '[]',
     related_modules TEXT DEFAULT '[]',
@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS skills (
     file        TEXT NOT NULL,
     tags        TEXT DEFAULT '[]',
     covers      TEXT DEFAULT '[]',
+    when_to_use TEXT DEFAULT '',
+    input_spec  TEXT DEFAULT '',
+    output_spec TEXT DEFAULT '',
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -224,7 +227,23 @@ class KngDatabase:
                 "INSERT INTO schema_version (version, description) VALUES (?, ?)",
                 (SCHEMA_VERSION, "initial schema"),
             )
+        elif existing < SCHEMA_VERSION:
+            self._migrate(cur, existing)
         self.conn.commit()
+
+    def _migrate(self, cur, from_version: int) -> None:
+        if from_version < 2:
+            for col, default in [
+                ("when_to_use", "''"), ("input_spec", "''"), ("output_spec", "''"),
+            ]:
+                try:
+                    cur.execute(f"ALTER TABLE skills ADD COLUMN {col} TEXT DEFAULT {default}")
+                except Exception:
+                    pass
+            cur.execute(
+                "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                (2, "add skill callable interface fields + skill entry_type"),
+            )
 
     # ── Projects ──
 
@@ -542,17 +561,24 @@ class KngDatabase:
     # ── Skills ──
 
     def upsert_skill(self, id: str, name: str, file: str,
-                     tags: List[str] = None, covers: List[str] = None) -> None:
+                     tags: List[str] = None, covers: List[str] = None,
+                     when_to_use: str = "", input_spec: str = "",
+                     output_spec: str = "") -> None:
         self.conn.execute(
-            """INSERT INTO skills (id, name, file, tags, covers)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO skills (id, name, file, tags, covers,
+                                   when_to_use, input_spec, output_spec)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  name=excluded.name, file=excluded.file,
                  tags=excluded.tags, covers=excluded.covers,
+                 when_to_use=excluded.when_to_use,
+                 input_spec=excluded.input_spec,
+                 output_spec=excluded.output_spec,
                  updated_at=datetime('now')""",
             (id, name, file,
              json.dumps(tags or [], ensure_ascii=False),
-             json.dumps(covers or [], ensure_ascii=False)),
+             json.dumps(covers or [], ensure_ascii=False),
+             when_to_use, input_spec, output_spec),
         )
         self.conn.commit()
 

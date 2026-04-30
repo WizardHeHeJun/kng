@@ -1,6 +1,6 @@
 ---
 name: kng-test
-description: "Generate structured test design from a Feishu/Lark document URL using dual knowledge bases (capability + project)"
+description: "Generate structured design output from a Feishu/Lark document URL using dual knowledge bases (capability + project)"
 argument-hint: "<feishu-url> [--project <project-id>]"
 allowed-tools: [Read, Write, Glob, Grep, Bash, Skill]
 ---
@@ -60,11 +60,10 @@ Capture the stdout as the document content. If the command fails:
 - If not installed, tell the user to install lark-cli first
 - If auth fails, suggest running `lark-cli auth login`
 
-## Step 2: Retrieve Knowledge Base Context
+## Step 2: Retrieve Project Knowledge Base Context
 
 ### File mode (no `db_path` in config):
 
-Run the KB retrieval script:
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
   --query-file /dev/stdin \
@@ -86,38 +85,105 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
   <<< "DOCUMENT_CONTENT_HERE"
 ```
 
-Both modes output the same JSON format with:
-- `capability_hits`, `project_hits` — matched KB entries
-- `detected_module` (with `id`, `name`, `score`) — which business module this document belongs to
-- `related_modules` — modules connected to the detected module via the knowledge graph, each with `relation_type`, `description`, `risk_level`, and `test_focus`
-- `stats` — includes `storage_mode: "file"` or `storage_mode: "sqlite"` to confirm which mode was used
+Parse the output JSON. Focus on:
+- `project_hits` — matched project KB entries (business logic, constraints, known issues)
+- `detected_module` — which business module this document belongs to
+- `related_modules` — cross-system boundaries for integration testing
+- `matched_scenarios` — which scenario templates matched (indicates relevant skill combinations)
 
-Parse all fields. The `detected_module` goes into output metadata. The `related_modules` are critical — they tell you which cross-system boundaries need integration testing.
+For each project hit, use the Read tool to load the full file content (up to 4000 characters).
 
 If the script is unavailable or fails, fall back to manual retrieval:
-1. Use Glob to find all `.md` files in `${CLAUDE_PLUGIN_ROOT}/kb/capability/` and `${KB_ROOT}/projects/${PROJECT_ID}/`
+1. Use Glob to find all `.md` files in `${KB_ROOT}/projects/${PROJECT_ID}/`
 2. Use Read to read each file
 
-## Step 3: Read Hit Files
+## Step 3: Select Capability Skills (技能工具箱选择)
 
-For each hit returned by the retrieval script, use the Read tool to load the full file content (up to 4000 characters per file). This gives you complete context beyond the snippets.
+The capability knowledge base contains **callable skills** — each one is a focused testing ability with trigger conditions, procedures, and output specs. You must select and invoke relevant skills rather than generating test designs from scratch.
 
-## Step 4: Generate Test Design
+### 3a. Load the Skill Toolbox
 
-Using the test-design-methodology skill (which should be auto-loaded in your context), generate a JSON object that:
-- Analyzes the document content thoroughly
-- Applies the capability KB methodology (test point design rules, priority definitions, script specs)
-- Incorporates project-specific knowledge (game mechanics, known bug patterns, constraints)
-- Follows the exact JSON schema defined in the methodology skill
-- Includes `source_refs` citing which KB files informed each aspect of the design
+Read the skill registry:
+```bash
+cat "${CLAUDE_PLUGIN_ROOT}/kb/capability/skill-registry.yaml"
+```
 
-**Important**: Generate at least 4 test points and 4 test cases. Cover functional, boundary, exception, and state paths.
+Or in DB mode, query skills:
+```sql
+SELECT id, name, file, when_to_use, input_spec, output_spec FROM skills
+```
 
-**Integration test points from knowledge graph**: If `related_modules` is non-empty, generate additional test points of type `integration` for each related module with `risk_level` = `high` or `medium`. Use the relation's `test_focus` as guidance. For example, if the document is about 战斗系统 and the graph shows `battle ──depends_on──▶ equipment [HIGH]`, generate test points like:
-- `TP-INT-001` [integration] 装备属性变更后战斗伤害实时刷新
-- `TP-INT-002` [integration] 装备卸下状态下的战斗数值回退
+The registry lists all available skills with:
+- `when_to_use` — trigger conditions (when this skill is relevant)
+- `input` — what the skill needs from the document
+- `output` — what test artifacts it produces
 
-These integration test points must be clearly labeled with `type: "integration"` and note which two systems are involved in `source_refs`.
+### 3b. Match Skills to Document
+
+Analyze the document content and select applicable skills by matching against each skill's `when_to_use` conditions:
+
+| Skill | Select when document contains... |
+|-------|----------------------------------|
+| **功能路径覆盖** | User flows, feature entries, process descriptions, conditional branches |
+| **边界值设计** | Numeric ranges, quantity limits, string lengths, time ranges |
+| **异常与容错设计** | Network operations, server interactions, external dependencies |
+| **状态流转验证** | State changes, conditional triggers, concurrent operations |
+| **权限与安全测试** | Role distinctions, resource ownership, access controls |
+| **接口自动化设计** | API interactions, server-side logic, data persistence |
+| **优先级与风险评估** | Always selected (runs after other skills to calibrate priorities) |
+
+**Selection rule**: A skill is selected if the document content matches ANY of its trigger conditions. Most documents will match 3-5 skills. Select at least 2 skills for any document.
+
+Display the selected skills: `🔧 选择技能: {skill_names}`
+
+## Step 4: Invoke Selected Skills (技能调用)
+
+For each selected skill, read its full procedure file and apply it to the document:
+
+### 4a. Read Skill Procedure
+
+For each selected skill, read its capability KB file:
+```
+${CLAUDE_PLUGIN_ROOT}/kb/capability/{skill.file}
+```
+
+Each skill file contains:
+- **触发条件**: Confirms this skill is relevant
+- **输入**: What to extract from the document
+- **执行步骤**: Step-by-step procedure to follow
+- **输出规范**: The test points format and ID prefix to use
+- **质量检查**: Checklist to verify output quality
+
+### 4b. Execute Each Skill
+
+Follow the skill's `执行步骤` (procedure) using the document content as input:
+1. Extract the relevant parts of the document as specified by the skill's `输入`
+2. Execute each step in the skill's procedure
+3. Generate test points following the skill's `输出规范` (using the specified ID prefix: TP-FP-, TP-BV-, TP-EX-, TP-ST-, TP-PM-, TP-API-)
+4. Verify the output against the skill's `质量检查` checklist
+
+### 4c. Generate Integration Test Points
+
+If `related_modules` from Step 2 is non-empty, generate additional integration test points for each related module with `risk_level` = `high` or `medium`. Use the relation's `test_focus` as guidance:
+- `TP-INT-001` [integration] — clearly labeled with `type: "integration"`
+- Note which two systems are involved in `source_refs`
+
+### 4d. Run Priority & Risk Assessment
+
+The **优先级与风险评估** skill always runs last. It:
+- Calibrates priorities across all generated test points (P0 ≤ 30%)
+- Identifies high-risk scenarios
+- Extracts clarification items from the document
+- Generates the `risks` and `clarifications` arrays
+
+## Step 4e: Compose Final Output
+
+Merge all skill outputs into a single test design JSON following the schema defined in the test-design-methodology skill:
+- Combine test points from all invoked skills (each with its skill-specific ID prefix)
+- Include `source_refs` citing which capability skills and project KB files informed the design
+- Add a `invoked_skills` field listing which skills were selected and invoked
+
+**Important**: Generate at least 4 test points and 4 test cases total. The combination of multiple skills should naturally exceed this minimum.
 
 ## Step 5: Validate Output
 
@@ -155,8 +221,10 @@ A readable Markdown summary:
 - 来源文档：{url}
 - 生成时间：{ISO timestamp}
 
-## 命中知识（基础能力库）
-- {path} (score={score})
+## 调用技能
+- 功能路径覆盖 → 产出 TP-FP-001 ~ TP-FP-003
+- 边界值设计 → 产出 TP-BV-001 ~ TP-BV-002
+- ...
 
 ## 命中知识（项目库）
 - {path} (score={score})
@@ -167,7 +235,9 @@ A readable Markdown summary:
   - 测试重点: 属性加成实时生效, 装备更换后数值刷新
 
 ## 测试点
-- `TP-001` [functional] 测试点标题
+- `TP-FP-001` [functional] 功能路径测试点（来自：功能路径覆盖）
+- `TP-BV-001` [boundary] 边界值测试点（来自：边界值设计）
+- `TP-EX-001` [exception] 异常测试点（来自：异常与容错设计）
 - `TP-INT-001` [integration] 跨系统集成测试点（来自知识图谱）
 
 ## 测试用例
@@ -183,7 +253,9 @@ A readable Markdown summary:
 - 待确认问题
 
 ## 引用来源
-- [capability] path - note
+- [skill] functional-path-coverage - 功能路径覆盖
+- [skill] boundary-value-design - 边界值设计
+- [project] path - note
 - [graph] battle→equipment: 战斗伤害依赖装备属性
 ```
 

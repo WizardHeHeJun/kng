@@ -80,7 +80,7 @@ List all knowledge base files.
    - api-test-script-playbook.md (23 lines) — 接口自动化脚本作业手册
 
    ## 项目知识库
-   ### demo-game (./kb/projects/demo-game/)
+   ### my-project (./kb/projects/my-project/)
    已注册模块: battle(战斗系统), reward(奖励系统), shop(商城系统)
    - project-overview.md (14 lines) — 项目概览
    - battle-skill-system.md (45 lines) — [battle] 技能系统设计
@@ -145,7 +145,7 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 
 2. **Analyze document content**:
    - Extract a meaningful title from the first heading.
-   - Identify the document's **主题域 (subject domain)**: what game system or business module does this document describe?
+   - Identify the document's **主题域 (subject domain)**: what business system or module does this document describe?
    - Look at: section headings, key terminology, the overall topic.
 
 3. **Module matching & discovery** (project type only):
@@ -229,7 +229,7 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 
 8. **文档审查反馈**:
 
-   导入完成后，回顾文档原始内容，从 QA / 测试设计的专业视角给出反馈。**不修改已写入的文件内容**，仅以文字形式向用户报告发现的问题。重点关注以下方面：
+   导入完成后，回顾文档原始内容，从能力知识库定义的专业视角给出反馈。**不修改已写入的文件内容**，仅以文字形式向用户报告发现的问题。重点关注以下方面：
 
    - **规则矛盾或歧义**：文档内不同章节对同一规则的描述是否存在冲突或模糊之处
    - **边界条件缺失**：关键数值、状态转换、异常流程是否缺少边界定义（如上限/下限、超时处理、并发场景）

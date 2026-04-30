@@ -1,6 +1,7 @@
-# KNG — Knowledge-driven Test Generator
+# KNG — Knowledge-driven Generator
 
-双知识库驱动的游戏测试设计工具，Claude Code 插件。
+双知识库驱动的领域知识作业工具，Claude Code 插件。
+通过更换能力知识库，可适配不同领域（QA测试、前端开发、后端工程等）。
 
 ## 安装
 
@@ -44,11 +45,11 @@ npx kng-plugin uninstall
 ### 1. 初始化项目知识库
 
 ```
-/kng-init my-game                           # 空模板
-/kng-init my-game --from-lark <总览文档URL>  # 从策划案自动提取模块和关联
+/kng-init my-project                           # 空模板
+/kng-init my-project --from-lark <总览文档URL>  # 从项目文档自动提取模块和关联
 ```
 
-创建 `kb/projects/my-game/` 并自动设为当前活跃项目。
+创建 `kb/projects/my-project/` 并自动设为当前活跃项目。
 
 ### 2. 生成测试设计
 
@@ -72,7 +73,7 @@ npx kng-plugin uninstall
 ### 4. 切换项目
 
 ```
-/kng-select other-game     # 切换到另一个项目
+/kng-select other-project  # 切换到另一个项目
 /kng-select --list         # 查看所有可用项目
 /kng-select                # 交互式选择
 ```
@@ -83,8 +84,8 @@ npx kng-plugin uninstall
 
 | 知识库 | 位置 | 用途 | 更新方式 |
 |--------|------|------|----------|
-| **基础能力库** | 插件目录 `kb/capability/` | 通用测试方法论、脚本规范、质量门禁 | 随插件更新 / `/kng-kb add` |
-| **项目知识库** | 工作目录 `kb/projects/<id>/` | 游戏玩法、系统设计、历史缺陷 | `/kng-kb add` / `/kng-kb import` / 手动编辑 |
+| **基础能力库** | 插件目录 `kb/capability/` | 领域方法论、技能工具箱、规范 | 随插件更新 / `/kng-kb add` |
+| **项目知识库** | 工作目录 `kb/projects/<id>/` | 业务系统、架构设计、历史问题 | `/kng-kb add` / `/kng-kb import` / 手动编辑 |
 
 ### 项目上下文
 
@@ -119,13 +120,13 @@ npx kng-plugin uninstall
 ## 学习闭环
 
 ```
-飞书文档 → /kng-test → 测试设计 → 实际执行 → /kng-evolve → 知识库更新 → 下次更准
+项目文档 → /kng-test → 设计产出 → 实际执行 → /kng-evolve → 知识库更新 → 下次更准
 ```
 
 每次使用 `/kng-test` 后，用 `/kng-evolve` 回顾产出：
 - 遗漏了哪些场景？→ 补充到能力库或项目库
-- 发现了新 bug 模式？→ 沉淀到 `bug-patterns.md`
-- 测试方法有改进？→ 更新能力库规范
+- 发现了新问题模式？→ 沉淀到项目知识库
+- 方法有改进？→ 更新能力库规范
 
 知识库会随着团队使用不断进化，新人加入时直接受益于前人积累。
 
@@ -135,7 +136,7 @@ npx kng-plugin uninstall
 
 ```json
 {
-  "active_project": "my-game",
+  "active_project": "my-project",
   "kb_root": "./kb",
   "output_dir": "./test-output"
 }
@@ -149,15 +150,15 @@ npx kng-plugin uninstall
 
 | 文件 | 内容 |
 |------|------|
-| `project-overview.md` | 游戏类型、核心循环、主要系统、高风险区域 |
-| `bug-patterns.md` | 历史缺陷模式、按类型分类（奖励/配置/状态） |
-| `test-constraints.md` | 环境要求、数据准备、回归策略、验收标准 |
+| `project-overview.md` | 项目类型、核心工作流、主要系统、高风险区域 |
+| `bug-patterns.md` | 历史问题模式、按模块分类 |
+| `test-constraints.md` | 环境要求、数据准备、验收标准 |
 | `<system-name>.md` | 具体系统的详细设计文档（按需添加） |
 
 ### 写作建议
 
 - 使用 Markdown 格式，清晰的标题层级
-- 重点写**测试相关**的信息：边界值、异常场景、历史踩坑
+- 重点写**专业领域相关**的信息：关键约束、异常场景、历史踩坑
 - 保持文件精练，每个文件聚焦一个主题
 - 关键词丰富有助于检索命中
 

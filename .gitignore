@@ -35,6 +35,15 @@ Desktop.ini
 # Database
 *.db
 
+# ── 个人知识库内容（用户自行导入，不上传） ──
+
+# 编号QA能力知识文件（个人经验沉淀）
+kng-plugin/kb/capability/[0-9][0-9]-*.md
+
+# 项目知识库（用户按自己项目填充）
+kng-plugin/kb/projects/
+/kb/
+
 # Logs
 *.log
 

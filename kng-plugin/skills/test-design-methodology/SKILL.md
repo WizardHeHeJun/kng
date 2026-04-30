@@ -4,44 +4,47 @@ description: >
   Auto-activate when the user asks to generate test design, create test cases,
   write test plans, analyze test coverage, generate test points, or discusses
   test methodology, output format, or quality gates. Provides structured test
-  design methodology and JSON output schema for game QA.
+  design methodology and JSON output schema.
 version: 1.0.0
 ---
 
-# 游戏测试设计方法论
+# 作业设计方法论
 
-你是游戏测试架构助手。当需要生成测试设计时，请严格遵循以下方法论和输出规范。
+你是知识驱动的专业作业助手。当需要生成结构化设计产出时，请严格遵循以下方法论和输出规范。
+你的专业领域由能力知识库定义——可以是测试设计、前端开发、后端工程或其他领域。
 
-## 双知识库体系
+## 双知识库 + 技能工具箱体系
 
-你会同时参考两类知识：
-1. **基础能力知识库**（测试方法、脚本规范、质量门禁）——位于插件安装目录 `${CLAUDE_PLUGIN_ROOT}/kb/capability/`
-2. **项目知识库**（玩法、系统、接口、历史缺陷、项目约束）——位于用户工作目录 `./kb/projects/<project-id>/`
+你会使用三层知识：
+1. **可调用技能工具箱**（`entry_type: skill`）——位于能力知识库中，每个技能有触发条件、执行步骤、输出规范，可被主动选择和调用
+2. **规则与规范**（`entry_type: guideline/playbook`）——位于能力知识库中，提供通用方法论参考
+3. **项目知识库**（业务系统、接口、历史问题等）——位于用户工作目录 `./kb/projects/<project-id>/`
 
-生成测试设计前，必须检索并参考两个知识库的相关内容。
+生成设计产出时，必须先选择并调用相关的能力技能，而不是从零开始设计。
 
-## 测试点设计规则
+## 可调用技能（Capability Skills）
 
-- **功能路径**：至少覆盖 1 条成功主路径
-- **边界路径**：字段上下限、空值、非法字符
-- **异常路径**：后端异常、网络抖动、超时重试
-- **状态路径**：重复提交、并发操作、幂等校验
-- **权限路径**：角色差异、资源隔离、越权访问
+能力知识库中 `entry_type = "skill"` 的条目是可调用技能。每个技能定义了：
+- **触发条件**：什么情况下应该调用此技能
+- **输入**：需要从项目文档中提取什么信息
+- **执行步骤**：具体的分析和设计步骤
+- **输出规范**：产出什么格式的测试点
+- **质量检查**：如何验证产出质量
+
+当前可用技能：
+- 功能路径覆盖 → 测试点 ID: TP-FP-xxx
+- 边界值设计 → 测试点 ID: TP-BV-xxx
+- 异常与容错设计 → 测试点 ID: TP-EX-xxx
+- 状态流转验证 → 测试点 ID: TP-ST-xxx
+- 权限与安全测试 → 测试点 ID: TP-PM-xxx
+- 接口自动化设计 → 测试点 ID: TP-API-xxx
+- 优先级与风险评估 → 校准优先级 + 风险清单
 
 ## 优先级定义
 
 - **P0**：核心商业路径、支付/发奖/扣款、数据一致性
 - **P1**：主要业务流程、关键配置变更
 - **P2**：非核心路径、低风险展示逻辑
-
-## 接口自动化脚本规范
-
-当测试设计涉及接口测试时，还需遵循：
-- 按域分目录：`tests/api/<domain>/`
-- 用例命名：`test_<feature>_<scenario>.py`
-- 数据驱动：参数化输入覆盖边界值
-- 必须覆盖：401/403 权限校验、400 参数缺失/非法值、幂等键重复提交、依赖服务超时与降级
-- 质量门禁：失败日志含请求参数与响应字段，断言必须描述业务语义，不允许仅断言状态码
 
 ## 输出 JSON Schema
 
@@ -76,9 +79,10 @@ version: 1.0.0
     }
   ],
   "clarifications": ["待确认问题"],
+  "invoked_skills": ["functional-path-coverage", "boundary-value-design"],
   "source_refs": [
     {
-      "source_type": "capability|project|document",
+      "source_type": "capability|project|document|skill",
       "path": "知识来源路径",
       "note": "引用说明"
     }

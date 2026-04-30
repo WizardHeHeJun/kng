@@ -1,15 +1,15 @@
 {
   "name": "kng",
   "version": "1.0.0",
-  "description": "Knowledge-driven Test Generator：双知识库驱动的游戏测试设计工具",
+  "description": "Knowledge-driven Generator：双知识库驱动的领域知识作业工具",
   "author": {
-    "name": "QA Team"
+    "name": "KNG Team"
   },
   "license": "MIT",
   "keywords": [
-    "testing",
-    "game-qa",
     "knowledge-base",
+    "domain-agnostic",
+    "capability-driven",
     "test-design",
     "lark"
   ]

@@ -14,7 +14,7 @@ Switch or inspect the active project knowledge base. All other KNG skills (`/kng
 ## Step 1: Parse Arguments
 
 Extract from `$ARGUMENTS`:
-- `project-id` (optional): The project to switch to (e.g., `demo-game`)
+- `project-id` (optional): The project to switch to (e.g., `my-project`)
 - `--list` (optional): Just list available projects without switching
 
 Set defaults:

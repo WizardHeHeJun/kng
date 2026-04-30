@@ -1,6 +1,6 @@
 ---
 name: kng-init
-description: "Initialize a new project knowledge base with template files for KNG test design"
+description: "Initialize a new project knowledge base with template files for KNG"
 argument-hint: "<project-id> [--from-lark <overview-doc-url>]"
 allowed-tools: [Read, Write, Glob, Bash, Skill]
 ---
@@ -12,13 +12,13 @@ When invoked with: $ARGUMENTS
 Initialize a new project knowledge base so that `/kng-test` can generate project-aware test designs.
 
 Supports two modes:
-- **空项目模式**: `/kng-init my-game` — 生成空模板，模块注册表为空，后续通过 `/kng-kb import` 逐步填充
-- **文档驱动模式**: `/kng-init my-game --from-lark <url>` — 从策划案总览文档自动分析游戏类型、核心系统，生成项目概览和模块注册表
+- **空项目模式**: `/kng-init my-project` — 生成空模板，模块注册表为空，后续通过 `/kng-kb import` 逐步填充
+- **文档驱动模式**: `/kng-init my-project --from-lark <url>` — 从项目总览文档自动分析项目类型、核心系统，生成项目概览和模块注册表
 
 ## Step 1: Parse Arguments
 
 Extract from `$ARGUMENTS`:
-- `project-id` (required): Short identifier like `demo-game`, `project-x`
+- `project-id` (required): Short identifier like `my-project`, `project-x`
 - `--from-lark <url>` (optional): Feishu/Lark document URL for the project overview or GDD
 
 If no `project-id` is provided, ask the user for one.
@@ -47,17 +47,17 @@ lark-cli docs +fetch --url "<url>" --as user
 
 Read the fetched document carefully and extract:
 
-1. **游戏类型**: What kind of game is this? (e.g., MMORPG, 卡牌, SLG, 休闲, FPS, MOBA)
-2. **核心循环**: What is the game's core loop? (e.g., 任务→战斗→奖励→成长)
-3. **业务模块/系统列表**: Identify ALL distinct game systems or modules mentioned in the document. Look for:
-   - Section headings that name systems (e.g., "## 战斗系统", "## 商城")
+1. **项目类型**: What kind of project is this? (e.g., Web应用, 移动App, 后端服务, 游戏, 数据平台)
+2. **核心工作流**: What is the project's core workflow? (e.g., 用户注册→浏览→下单→支付→配送)
+3. **业务模块/系统列表**: Identify ALL distinct systems or modules mentioned in the document. Look for:
+   - Section headings that name systems (e.g., "## 用户系统", "## 支付模块")
    - Feature descriptions that imply distinct modules
    - Any table of contents or system architecture diagrams described in text
 4. **系统间关联关系**: This is critical — identify HOW systems interact with each other. Look for:
-   - Data flow: "任务完成后发放奖励" → quest feeds_into reward
-   - Dependencies: "伤害计算基于装备属性" → battle depends_on equipment
-   - Shared state: "背包和商城共享道具库存" → inventory shares_state shop
-   - Triggers: "角色升级解锁新技能" → leveling triggers battle
+   - Data flow: "订单完成后触发结算" → order feeds_into settlement
+   - Dependencies: "权限校验依赖用户角色" → access depends_on user
+   - Shared state: "库存和商城共享商品数据" → inventory shares_state shop
+   - Triggers: "注册完成触发新手引导" → registration triggers onboarding
    - Explicit architecture diagrams or flow charts in the document
    - Any mention of "调用", "依赖", "触发", "关联", "同步", "读取", "写入" between systems
 5. **高风险区域**: Any mentions of complexity, known issues, or tricky interactions between systems
@@ -68,35 +68,29 @@ Read the fetched document carefully and extract:
 Write `./kb/projects/${PROJECT_ID}/project-overview.md` with ACTUAL content extracted from the document — not placeholder templates. Example:
 
 ```markdown
-# my-game 项目概览
+# my-project 项目概览
 
-## 游戏类型
-开放世界 MMORPG
+## 项目类型
+（从文档中提取，如：Web应用、移动App、游戏、后端服务等）
 
-## 核心循环
-探索 → 战斗 → 掉落 → 装备强化 → 挑战更高难度
+## 核心工作流
+（从文档中提取核心业务流程）
 
 ## 主要系统
-- 战斗系统：实时动作战斗，技能组合连招机制
-- 装备系统：装备掉落、强化、附魔、套装效果
-- 任务系统：主线剧情、支线任务、日常委托
-- 社交系统：公会、组队副本、交易行
-- 商城系统：外观道具、月卡、战令
+（从文档中提取各业务模块及其职责描述）
 
 ## 高风险区域
-- 战斗伤害计算：多 buff 叠加时的精度问题
-- 交易行：并发挂单/购买的一致性
+（从文档中提取复杂度高或历史易出问题的模块）
 
 ## 技术栈 & 约束
-- 客户端：Unity
-- 服务端：Go 微服务
+（从文档中提取技术栈和特殊约束）
 ```
 
 ### 4d. Generate project-modules.yaml from discovered modules
 
 For EACH business module/system identified in step 4b, create a module entry with:
-- `id`: lowercase English identifier (e.g., `battle`, `equipment`, `quest`)
-- `name`: Chinese name as it appears in the document (e.g., `战斗系统`)
+- `id`: lowercase English identifier (e.g., `user`, `payment`, `order`)
+- `name`: Name as it appears in the document (e.g., `用户系统`)
 - `tags`: Extract 8-15 keywords that would appear in design documents about this module. Include:
   - The module name itself and common abbreviations
   - Core concepts of this module (e.g., for battle: 技能, 伤害, buff, 血量, ...)
@@ -107,23 +101,18 @@ Write `./kb/projects/${PROJECT_ID}/project-modules.yaml`:
 
 ```yaml
 # Project Module Registry & Knowledge Graph — 项目模块索引与知识图谱
-# 从策划案文档自动生成，可手动补充
+# 从项目文档自动生成，可手动补充
 # 新文档导入时 (/kng-kb import) 会自动匹配模块或新增模块/关联
 
 auto_detect: true
 
 modules:
-  - id: battle
-    name: 战斗系统
-    tags: [战斗, 技能, 伤害, buff, debuff, 血量, 攻击, 防御, PVP, PVE, 连招, 闪避]
-    description: 实时动作战斗，技能组合连招机制
-
-  - id: equipment
-    name: 装备系统
-    tags: [装备, 强化, 附魔, 套装, 掉落, 品质, 词条, 分解]
-    description: 装备掉落、强化、附魔、套装效果
-
-  # ... more modules discovered from the document
+  # ... modules discovered from the document
+  # Example:
+  # - id: user
+  #   name: 用户系统
+  #   tags: [用户, 注册, 登录, 认证, 角色, 权限, 账号]
+  #   description: 用户注册、登录、角色权限管理
 
 # 系统关联图谱 — 模块间的依赖、数据流、触发关系
 # 关系类型:
@@ -132,21 +121,14 @@ modules:
 #   shares_state — A 和 B 读写同一份数据
 #   triggers    — A 的事件触发 B 的流程
 relations:
-  - from: battle
-    to: equipment
-    type: depends_on
-    description: 战斗伤害计算依赖装备属性加成
-    risk_level: high
-    test_focus: [属性加成实时生效, 装备更换后数值刷新, 套装效果叠加]
-
-  - from: quest
-    to: reward
-    type: feeds_into
-    description: 任务完成触发奖励发放
-    risk_level: high
-    test_focus: [完成条件准确判定, 奖励正确发放, 重复领取防护]
-
-  # ... more relations discovered from the document
+  # ... relations discovered from the document
+  # Example:
+  # - from: order
+  #   to: payment
+  #   type: feeds_into
+  #   description: 订单确认触发支付流程
+  #   risk_level: high
+  #   test_focus: [订单金额与支付金额一致, 支付超时处理, 重复支付防护]
 
 fallback_module: general
 ```
@@ -173,14 +155,14 @@ Generate template files with placeholder content.
 ```markdown
 # ${PROJECT_ID} 项目概览
 
-## 游戏类型
+## 项目类型
 <!-- 使用 /kng-init ${PROJECT_ID} --from-lark <总览文档URL> 自动填充 -->
 
-## 核心循环
-<!-- 例如：任务 → 战斗 → 奖励 → 成长 -->
+## 核心工作流
+<!-- 例如：注册 → 浏览 → 下单 → 支付 → 配送 -->
 
 ## 主要系统
-<!-- 通过 /kng-kb import 导入策划案后自动发现 -->
+<!-- 通过 /kng-kb import 导入项目文档后自动发现 -->
 
 ## 高风险区域
 <!-- 历史上容易出问题的模块 -->
@@ -194,7 +176,7 @@ Generate template files with placeholder content.
 ```yaml
 # Project Module Registry & Knowledge Graph — 项目模块索引与知识图谱
 # 模块和关联均为空 — 通过以下方式填充：
-# 1. /kng-init ${PROJECT_ID} --from-lark <总览文档URL>  批量发现模块+关联
+# 1. /kng-init ${PROJECT_ID} --from-lark <总览文档URL>  从文档批量发现模块+关联
 # 2. /kng-kb import --from-lark <URL> --type project    逐步发现新模块+跨系统引用
 # 3. /kng-evolve                                        跨系统 bug 反馈自动添加关联
 
@@ -214,16 +196,16 @@ These files are always generated as templates, regardless of mode:
 ### `./kb/projects/${PROJECT_ID}/bug-patterns.md`
 
 ```markdown
-# ${PROJECT_ID} 历史缺陷模式
+# ${PROJECT_ID} 历史问题模式
 
 <!-- 随着 /kng-evolve 反馈积累，此文件会自动按模块拆分为:
-     {module}-bug-patterns.md (如 battle-bug-patterns.md) -->
+     {module}-bug-patterns.md -->
 
-## 通用缺陷模式
+## 通用问题模式
 <!-- 跨模块的常见问题 -->
 
-## 测试关注点
-<!-- 基于历史缺陷，测试重点关注哪些方面 -->
+## 关注重点
+<!-- 基于历史问题，重点关注哪些方面 -->
 ```
 
 ### `./kb/projects/${PROJECT_ID}/test-constraints.md`
@@ -307,17 +289,16 @@ Print a summary:
   发现 {N} 个业务模块：
   | 模块 ID    | 名称      | 关键词数 |
   |-----------|----------|---------|
-  | battle    | 战斗系统   | 12      |
-  | equipment | 装备系统   | 8       |
+  | user      | 用户系统   | 10      |
+  | order     | 订单系统   | 8       |
 
   发现 {M} 条系统关联：
-  battle ──depends_on──▶ equipment  [HIGH] 伤害计算依赖装备属性
-  quest  ──feeds_into──▶ reward     [HIGH] 任务完成触发奖励发放
-  shop   ──shares_state─▶ inventory [MED]  共享道具库存数据
+  order ──feeds_into──▶ payment    [HIGH] 订单确认触发支付
+  user  ──depends_on──▶ auth       [HIGH] 用户操作依赖认证
   ```
 - Next steps:
-  - Document-driven: "模块和关联图谱已从文档自动提取。使用 `/kng-kb import` 导入更多策划案时，系统会自动匹配模块、发现新模块和新的系统关联。"
-  - Empty mode: "使用 `/kng-init ${PROJECT_ID} --from-lark <总览文档URL>` 从策划案自动发现模块和系统关联图谱，或使用 `/kng-kb import` 逐步积累。"
+  - Document-driven: "模块和关联图谱已从文档自动提取。使用 `/kng-kb import` 导入更多项目文档时，系统会自动匹配模块、发现新模块和新的系统关联。"
+  - Empty mode: "使用 `/kng-init ${PROJECT_ID} --from-lark <总览文档URL>` 从项目文档自动发现模块和系统关联图谱，或使用 `/kng-kb import` 逐步积累。"
 
 ## Step 9: 启动知识库查看器
 

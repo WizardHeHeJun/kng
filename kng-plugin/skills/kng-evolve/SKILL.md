@@ -55,12 +55,12 @@ Auto-detect the latest test design file in `test-output/`.
 
 ### Mode 2: Specific File Review
 ```
-/kng-evolve --source test-output/20260424-demo-game-test-design.json
+/kng-evolve --source test-output/20260424-my-project-test-design.json
 ```
 
 ### Mode 3: Learning from a Real Bug
 ```
-/kng-evolve --type project --project demo-game
+/kng-evolve --type project --project my-project
 ```
 
 ---
@@ -109,9 +109,9 @@ This enables routing project-specific feedback to the correct module-prefixed KB
 
 Present the test design summary (if available) and ask the user focused questions. Start with the most impactful:
 
-1. **遗漏场景**：有没有文档没覆盖但实际需要测的场景？
-2. **实际缺陷**：测试执行中发现了哪些预期之外的 bug？
-3. **方法改进**：测试方法上有什么可以沉淀的经验？
+1. **遗漏场景**：有没有文档没覆盖但实际需要关注的场景？
+2. **实际问题**：执行过程中发现了哪些预期之外的问题？
+3. **方法改进**：方法论上有什么可以沉淀的经验？
 
 If project memory already surfaced relevant learnings, present them first: "根据之前的记录，这些问题已被识别过：[...]. 是否有新的补充？"
 
@@ -160,31 +160,31 @@ When feedback is project-specific, use `project-modules.yaml` to identify the ta
 
 ### Example routing:
 
-User feedback: "奖励结算需要测断线重连后的重复发放"
+User feedback: "支付结算需要关注断线重连后的重复扣款"
 
-1. Keywords: `奖励`, `结算`, `断线重连`, `重复发放`
-2. **Capability routing**: scenario "奖励/支付结算测试" has `extra_tags: [并发, 幂等, 重复领取, 断线重连]` → **hit**
-3. Scenario requires: `[test-design-guidelines, api-test-script-playbook]`
-4. Action: update BOTH `test-design-guidelines.md` AND `api-test-script-playbook.md`
-5. **Module routing**: keywords `奖励`, `结算` match module `reward` → **hit**
-6. Action: append to `reward-bug-patterns.md` (create if not exists)
+1. Keywords: `支付`, `结算`, `断线重连`, `重复扣款`
+2. **Capability routing**: scenario tags match `[并发, 幂等, 重复, 断线重连]` → **hit**
+3. Scenario requires matched skill files
+4. Action: update matched capability skill files
+5. **Module routing**: keywords `支付`, `结算` match module `payment` → **hit**
+6. Action: append to `payment-bug-patterns.md` (create if not exists)
 
 ### Example: new module discovery via feedback
 
-User feedback: "宠物技能升级后属性加成没有刷新"
+User feedback: "通知系统发送延迟，用户收不到消息"
 
-1. Keywords: `宠物`, `技能`, `升级`, `属性加成`, `刷新`
-2. **Module routing**: no existing module has `宠物` in tags → **no match**
-3. **Auto-discover**: feedback clearly describes a "宠物系统"
+1. Keywords: `通知`, `发送`, `延迟`, `消息`
+2. **Module routing**: no existing module has `通知` in tags → **no match**
+3. **Auto-discover**: feedback clearly describes a "通知系统"
 4. Generate new module:
    ```yaml
-   - id: pet
-     name: 宠物系统
-     tags: [宠物, 召唤兽, 宠物技能, 宠物属性, 喂养, 进化, 出战, 宠物背包]
-     description: 宠物养成、技能、属性、出战机制
+   - id: notification
+     name: 通知系统
+     tags: [通知, 消息, 推送, 短信, 邮件, 站内信, 模板, 发送]
+     description: 消息推送、站内通知、邮件短信发送
    ```
 5. Append to `project-modules.yaml`
-6. Create `pet-bug-patterns.md` and write the feedback
+6. Create `notification-bug-patterns.md` and write the feedback
 
 ## Step 4: Detect Cross-System Relations (knowledge graph learning)
 
@@ -203,11 +203,11 @@ e. Check if this relation already exists in `project-modules.yaml` `relations:`
    - If exists: check if the bug warrants upgrading `risk_level` (e.g., `medium` → `high`), and add new `test_focus` items
    - If new: prepare a new relation entry to append
 
-Example: User reports "任务完成后奖励延迟发放，玩家以为没领到又点了一次导致双倍发放"
-- Modules involved: `quest`, `reward`
-- Relation: `quest ──feeds_into──▶ reward`
-- Risk: `high` (actual currency duplication bug)
-- New test_focus: "奖励发放延迟时的重复请求防护"
+Example: User reports "订单完成后结算延迟，用户以为没生效又点了一次导致重复扣款"
+- Modules involved: `order`, `payment`
+- Relation: `order ──feeds_into──▶ payment`
+- Risk: `high` (actual financial duplication issue)
+- New test_focus: "结算延迟时的重复请求防护"
 
 ## Step 5: Generate Updates
 
@@ -234,9 +234,9 @@ Show the user a summary of ALL proposed changes:
    + 必须覆盖的异常 section: "断线重连场景的幂等校验"
 3. kb/capability/skill-registry.yaml
    + scenarios: 新增 "断线重连测试" 场景模板
-4. kb/projects/demo-game/reward-bug-patterns.md  ← [reward] 模块
+4. kb/projects/my-project/payment-bug-patterns.md  ← [payment] 模块
    + "断线重连后重复结算"
-5. kb/projects/demo-game/project-modules.yaml    ← 知识图谱更新
+5. kb/projects/my-project/project-modules.yaml    ← 知识图谱更新
    + relations: quest ──feeds_into──▶ reward [HIGH] (新增/升级)
    + modules: 新增 pet 宠物系统 (仅当发现新模块时)
 ```

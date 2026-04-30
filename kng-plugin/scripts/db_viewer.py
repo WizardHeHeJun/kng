@@ -231,7 +231,7 @@ _NAV_ITEMS = [
     ("/table/projects", "项目"),
     ("/table/modules", "模块"),
     ("/table/kb_entries", "知识库"),
-    ("/table/skills", "技能"),
+    ("/table/skills", "技能工具箱"),
     ("/table/skill_scenarios", "场景"),
     ("/table/synonyms", "同义词"),
     ("/table/test_designs", "测试设计"),
@@ -272,6 +272,9 @@ _COLUMN_LABELS = {
     "updated_at": "更新时间",
     "file": "文件",
     "covers": "覆盖范围",
+    "when_to_use": "触发条件",
+    "input_spec": "输入",
+    "output_spec": "输出",
     "required_skills": "所需技能",
     "extra_tags": "附加标签",
     "test_focus": "测试重点",
@@ -376,6 +379,7 @@ _ENTRY_TYPE_LABELS = {
     "issue": "缺陷",
     "guideline": "规范",
     "playbook": "剧本",
+    "skill": "技能",
     "general": "通用",
 }
 
@@ -418,7 +422,7 @@ def page_dashboard(db: sqlite3.Connection) -> str:
     <h3>知识库分布</h3>
     <div class="grid">
         <div class="card">
-            <div class="label">通用能力库（跨项目）</div>
+            <div class="label">能力知识库（跨项目共享）</div>
             <div class="value" style="color:var(--green)">{cap}</div>
         </div>
         <div class="card">
@@ -603,6 +607,57 @@ def page_kb(db: sqlite3.Connection, page: int = 1, per_page: int = 50,
     return _layout("知识库", body, "/table/kb_entries", project, project_name)
 
 
+def page_skills(db: sqlite3.Connection) -> str:
+    rows = db.execute(
+        "SELECT id, name, file, tags, covers, when_to_use, input_spec, output_spec "
+        "FROM skills ORDER BY id"
+    ).fetchall()
+
+    if not rows:
+        body = '<h2>技能工具箱</h2><div class="empty">暂无可调用技能</div>'
+        return _layout("技能", body, "/table/skills")
+
+    cards = []
+    for row in rows:
+        d = dict(row)
+        tags_html = _tags_html(d.get("tags", "[]"))
+        covers_html = _tags_html(d.get("covers", "[]"))
+        when_to_use = _e(d.get("when_to_use") or "—")
+        input_spec = _e(d.get("input_spec") or "—")
+        output_spec = _e(d.get("output_spec") or "—")
+
+        cards.append(f"""
+        <div class="card" style="padding:20px;margin-bottom:12px;border-radius:8px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px;font-weight:600;color:var(--text)">{_e(d['name'])}</span>
+                <span style="font-size:12px;color:var(--text2);background:var(--surface2);
+                      padding:2px 8px;border-radius:4px">{_e(d['id'])}</span>
+                <span style="font-size:12px;color:var(--text2);margin-left:auto">{_e(d['file'])}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:80px 1fr;gap:6px 12px;font-size:13px">
+                <div style="color:var(--accent);font-weight:500">触发条件</div>
+                <div>{when_to_use}</div>
+                <div style="color:var(--accent);font-weight:500">输入</div>
+                <div>{input_spec}</div>
+                <div style="color:var(--accent);font-weight:500">输出</div>
+                <div>{output_spec}</div>
+                <div style="color:var(--accent);font-weight:500">标签</div>
+                <div>{tags_html}</div>
+                <div style="color:var(--accent);font-weight:500">覆盖范围</div>
+                <div>{covers_html}</div>
+            </div>
+        </div>""")
+
+    body = f"""
+    <h2>技能工具箱 <span style="color:var(--text2);font-size:16px">（共 {len(rows)} 个可调用技能）</span></h2>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
+        每个技能可在测试设计流程中被选择和调用。entry_type = "skill" 的知识条目会自动关联到此处。
+    </p>
+    {"".join(cards)}
+    """
+    return _layout("技能工具箱", body, "/table/skills")
+
+
 def page_table(db: sqlite3.Connection, table: str, page: int = 1,
                per_page: int = 50, project: str = "", kb_type: str = "") -> str:
     allowed = {
@@ -617,6 +672,9 @@ def page_table(db: sqlite3.Connection, table: str, page: int = 1,
 
     if table == "kb_entries":
         return page_kb(db, page, per_page, project, kb_type or "project")
+
+    if table == "skills":
+        return page_skills(db)
 
     project_name = _get_project_name(db, project)
 

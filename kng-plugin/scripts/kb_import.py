@@ -38,7 +38,13 @@ def extract_title(content: str, fallback: str) -> str:
 
 def classify_entry_type(filename: str, content: str) -> str:
     name = filename.lower()
-    head = content[:300]
+    head = content[:500]
+    if "可调用技能" in head or "## 触发条件" in head:
+        return "skill"
+    # Numbered methodology files (e.g. "01-四阶段工作流.md") are guidelines
+    import re as _re
+    if _re.match(r"^\d{2}-", filename):
+        return "guideline"
     if "bug-pattern" in name or "defect" in name or "缺陷" in head:
         return "issue"
     if "playbook" in name or "脚本" in head:
@@ -90,6 +96,9 @@ def import_capability(db: KngDatabase, capability_dir: pathlib.Path,
                 skill.get("id", ""), skill.get("name", ""),
                 skill.get("file", ""), skill.get("tags", []),
                 skill.get("covers", []),
+                when_to_use=skill.get("when_to_use", ""),
+                input_spec=skill.get("input", ""),
+                output_spec=skill.get("output", ""),
             )
             stats["skills"] += 1
         for scenario in registry.get("scenarios", []):
