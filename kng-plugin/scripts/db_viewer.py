@@ -8,13 +8,21 @@ Usage:
     python db_viewer.py --db ./kng.db --port 9000 --host 0.0.0.0
 """
 import argparse
+import base64
 import html
 import json
+import os
 import sqlite3
 import sys
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any, Dict, List, Optional, Tuple
+
+_FAVICON_DATA = ""
+_favicon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Elysia.png")
+if os.path.isfile(_favicon_path):
+    with open(_favicon_path, "rb") as _f:
+        _FAVICON_DATA = base64.b64encode(_f.read()).decode("ascii")
 
 # ── HTML Templates ──
 
@@ -22,165 +30,171 @@ _CSS = """
 :root {
     --bg: #ffffff;
     --surface: #ffffff;
-    --surface2: #f9fafb;
-    --border: #e5e7eb;
-    --text: #1f2937;
-    --text2: #6b7280;
-    --accent: #db2777;
-    --accent2: #be185d;
-    --green: #059669;
-    --orange: #ea580c;
-    --red: #dc2626;
-    --yellow: #ca8a04;
+    --surface2: #f8f9fa;
+    --border: #e8e8e8;
+    --text: #333333;
+    --text2: #999999;
+    --accent: #e84393;
+    --accent2: #d63384;
+    --green: #2ecc71;
+    --orange: #e67e22;
+    --red: #e74c3c;
+    --yellow: #f1c40f;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", "Helvetica Neue", sans-serif;
     background: var(--bg); color: var(--text);
-    line-height: 1.6;
+    line-height: 1.6; min-height: 100vh; -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a:hover { text-decoration: none; color: var(--accent2); }
 
 .topbar {
-    background: linear-gradient(135deg, #fce7f3, #fdf2f8); border-bottom: 1px solid #f9a8d4;
-    padding: 12px 24px; display: flex; align-items: center; gap: 24px;
-    position: sticky; top: 0; z-index: 100;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px; display: flex; align-items: center; gap: 20px;
+    position: sticky; top: 0; z-index: 100; height: 48px;
 }
-.topbar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; color: var(--accent); }
-.topbar nav { display: flex; gap: 16px; flex-wrap: wrap; }
+.topbar h1 { font-size: 16px; font-weight: 600; white-space: nowrap; color: var(--accent); }
+.topbar nav { display: flex; gap: 4px; flex-wrap: wrap; height: 100%; align-items: stretch; }
 .topbar nav a {
-    color: var(--text2); padding: 4px 12px; border-radius: 6px;
-    font-size: 14px; transition: all .15s;
+    color: var(--text2); padding: 0 14px; font-size: 14px;
+    display: flex; align-items: center;
+    border-bottom: 2px solid transparent; transition: color .15s;
 }
-.topbar nav a:hover, .topbar nav a.active {
-    color: var(--text); background: var(--surface2); text-decoration: none;
+.topbar nav a:hover { color: var(--text); }
+.topbar nav a.active {
+    color: var(--accent); border-bottom-color: var(--accent); font-weight: 600;
 }
 .search-box {
-    margin-left: auto; display: flex; gap: 8px;
+    margin-left: auto; display: flex; gap: 6px;
 }
 .search-box input {
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); padding: 6px 14px; border-radius: 6px;
-    font-size: 14px; width: 220px; outline: none;
+    background: var(--surface2); border: 1px solid transparent;
+    color: var(--text); padding: 6px 12px; border-radius: 6px;
+    font-size: 13px; width: 200px; outline: none; transition: all .2s;
 }
-.search-box input:focus { border-color: var(--accent); }
+.search-box input:focus { background: #fff; border-color: var(--accent); }
 .search-box button {
-    background: var(--accent2); color: #fff; border: none;
-    padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;
+    background: var(--accent); color: #fff; border: none;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    transition: background .15s;
 }
-.search-box button:hover { background: var(--accent); }
+.search-box button:hover { background: var(--accent2); }
 
-.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
-h2 { font-size: 22px; margin-bottom: 16px; font-weight: 600; }
-h3 { font-size: 16px; margin-bottom: 8px; color: var(--text2); font-weight: 500; }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+h2 { font-size: 20px; margin-bottom: 16px; font-weight: 600; color: var(--text); }
+h3 { font-size: 14px; margin-bottom: 8px; color: var(--text2); font-weight: 500; }
 
 .grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px; margin-bottom: 32px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px; margin-bottom: 24px;
 }
 .card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 20px; transition: border-color .15s;
+    border-radius: 8px; padding: 16px 20px; transition: box-shadow .2s;
 }
-.card:hover { border-color: var(--accent); }
-.card .label { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
-.card .value { font-size: 28px; font-weight: 700; }
+.card:hover { box-shadow: 0 4px 12px rgba(31,35,41,.08); }
+.card .label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.card .value { font-size: 28px; font-weight: 700; color: var(--text); }
 .card a { color: inherit; display: block; }
 .card a:hover { text-decoration: none; }
 
 table {
-    width: 100%; border-collapse: collapse;
-    background: var(--surface); border-radius: 10px;
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--surface); border-radius: 8px;
     overflow: hidden; border: 1px solid var(--border);
 }
 th {
-    text-align: left; padding: 12px 16px;
-    background: var(--surface2); font-size: 13px;
+    text-align: left; padding: 10px 16px;
+    background: var(--surface2); font-size: 12px;
     color: var(--text2); font-weight: 600; text-transform: uppercase;
-    letter-spacing: .5px; border-bottom: 1px solid var(--border);
+    letter-spacing: .3px; border-bottom: 1px solid var(--border);
     white-space: nowrap;
 }
 td {
-    padding: 10px 16px; border-bottom: 1px solid var(--border);
-    font-size: 14px; vertical-align: top;
+    padding: 10px 16px; border-bottom: 1px solid #f0f1f5;
+    font-size: 13px; vertical-align: top; color: var(--text);
 }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(219, 39, 119, .04); }
+tr:hover td { background: #fafafa; }
 
 .tag {
     display: inline-block; background: var(--surface2);
-    border: 1px solid var(--border); border-radius: 4px;
-    padding: 2px 8px; font-size: 12px; margin: 2px;
+    border: none; border-radius: 4px;
+    padding: 2px 8px; font-size: 12px; margin: 1px 2px;
     color: var(--text2);
 }
 .badge {
-    display: inline-block; padding: 2px 10px; border-radius: 12px;
-    font-size: 12px; font-weight: 600;
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; font-weight: 500;
 }
-.badge-cap { background: #d1fae5; color: var(--green); }
-.badge-proj { background: #fce7f3; color: var(--accent); }
+.badge-cap { background: #e8f8f0; color: var(--green); }
+.badge-proj { background: #ffe0ec; color: var(--accent); }
 .badge-high { background: #fee2e2; color: var(--red); }
-.badge-medium { background: #ffedd5; color: var(--orange); }
-.badge-low { background: #d1fae5; color: var(--green); }
+.badge-medium { background: #fff3e0; color: var(--orange); }
+.badge-low { background: #e8f8f0; color: var(--green); }
 
 .content-box {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 20px; margin-bottom: 16px;
-    white-space: pre-wrap; font-size: 14px; line-height: 1.7;
+    border-radius: 8px; padding: 20px; margin-bottom: 16px;
+    white-space: pre-wrap; font-size: 13px; line-height: 1.8;
     max-height: 600px; overflow-y: auto;
 }
 
 .pagination {
-    display: flex; gap: 8px; margin-top: 16px; align-items: center;
+    display: flex; gap: 6px; margin-top: 16px; align-items: center;
     justify-content: center;
 }
 .pagination a, .pagination span {
-    padding: 6px 14px; border-radius: 6px; font-size: 14px;
+    padding: 5px 12px; border-radius: 6px; font-size: 13px;
 }
 .pagination a {
-    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    transition: all .15s;
 }
-.pagination a:hover { border-color: var(--accent); text-decoration: none; }
+.pagination a:hover { border-color: var(--accent); color: var(--accent); }
 .pagination span { color: var(--text2); }
 
 .detail-grid {
-    display: grid; grid-template-columns: 140px 1fr;
-    gap: 8px 16px; margin-bottom: 20px;
+    display: grid; grid-template-columns: 120px 1fr;
+    gap: 6px 16px; margin-bottom: 20px;
 }
 .detail-grid .k { color: var(--text2); font-size: 13px; text-align: right; }
-.detail-grid .v { font-size: 14px; }
+.detail-grid .v { font-size: 13px; }
 
-.empty { text-align: center; padding: 48px; color: var(--text2); }
+.empty { text-align: center; padding: 48px; color: var(--text2); font-size: 14px; }
 
-.tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+.tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
 .tab {
-    padding: 10px 24px; font-size: 14px; font-weight: 500; cursor: pointer;
+    padding: 8px 20px; font-size: 14px; font-weight: 400; cursor: pointer;
     color: var(--text2); border-bottom: 2px solid transparent;
-    margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
-    text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+    margin-bottom: -1px; transition: color .15s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
 }
 .tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.tab.active .tab-count { background: #ffe0ec; color: var(--accent); }
 .tab .tab-count {
-    background: var(--surface2); border-radius: 10px; padding: 1px 8px;
-    font-size: 12px; font-weight: 400;
+    background: var(--surface2); border-radius: 10px; padding: 1px 7px;
+    font-size: 11px; font-weight: 400; color: var(--text2);
 }
 
-.rel-arrow { color: var(--accent); font-weight: 600; }
+.rel-arrow { color: var(--accent); font-weight: 500; }
 
 .graph-container {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 24px; margin-bottom: 24px;
+    border-radius: 8px; padding: 20px; margin-bottom: 16px;
 }
 .project-bar {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 8px 24px; display: flex; align-items: center; gap: 12px;
+    background: #fafafa; border-bottom: 1px solid var(--border);
+    padding: 8px 24px; display: flex; align-items: center; gap: 10px;
     font-size: 13px; color: var(--text2);
 }
 .project-bar a { color: var(--accent); text-decoration: none; font-weight: 500; }
-.project-bar a:hover { text-decoration: underline; }
-.project-bar .proj-name { color: var(--text); font-weight: 600; }
+.project-bar a:hover { color: var(--accent2); }
+.project-bar .proj-name { color: var(--text); font-weight: 500; }
 .project-bar .clear-btn {
     color: var(--text2); font-size: 12px; margin-left: 4px;
     cursor: pointer; text-decoration: none;
@@ -188,24 +202,24 @@ tr:hover td { background: rgba(219, 39, 119, .04); }
 .project-bar .clear-btn:hover { color: var(--red); }
 
 .project-card {
-    background: var(--surface); border: 2px solid var(--border);
-    border-radius: 12px; padding: 24px; cursor: pointer;
-    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px; cursor: pointer;
+    transition: box-shadow .2s;
 }
-.project-card:hover { border-color: var(--accent); background: #fdf2f8; transform: translateY(-2px); }
-.project-card .proj-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
-.project-card .proj-id { font-size: 13px; color: var(--text2); }
-.project-card .proj-desc { font-size: 13px; color: var(--text2); margin-top: 8px; }
+.project-card:hover { box-shadow: 0 4px 12px rgba(31,35,41,.08); }
+.project-card .proj-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.project-card .proj-id { font-size: 12px; color: var(--text2); }
+.project-card .proj-desc { font-size: 13px; color: var(--text2); margin-top: 6px; }
 
 .graph-node {
-    display: inline-block; background: var(--surface2);
-    border: 2px solid var(--border); border-radius: 8px;
-    padding: 8px 16px; margin: 4px; font-size: 14px; font-weight: 500;
-    cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    display: inline-block; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 14px; margin: 3px; font-size: 13px; font-weight: 400;
+    cursor: pointer; transition: all 0.15s;
     user-select: none;
 }
-.graph-node:hover { border-color: var(--accent); background: #fce7f3; }
-.graph-node.active { border-color: var(--accent); background: #fbcfe8; box-shadow: 0 0 0 2px var(--accent); }
+.graph-node:hover { border-color: var(--accent); color: var(--accent); background: #fff7f9; }
+.graph-node.active { border-color: var(--accent); color: #fff; background: var(--accent); }
 .rel-row-hidden { display: none; }
 .graph-edge {
     padding: 4px 0; font-size: 13px; color: var(--text2);
@@ -311,6 +325,7 @@ def _layout(title: str, body: str, active_path: str = "/",
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_e(title)} — KNG 知识库查看器</title>
+{"<link rel='icon' type='image/png' href='data:image/png;base64," + _FAVICON_DATA + "'>" if _FAVICON_DATA else ""}
 <style>{_CSS}</style>
 </head>
 <body>
