@@ -153,17 +153,60 @@ tr:hover td { background: rgba(108, 140, 255, .04); }
 
 .empty { text-align: center; padding: 48px; color: var(--text2); }
 
+.tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+.tab {
+    padding: 10px 24px; font-size: 14px; font-weight: 500; cursor: pointer;
+    color: var(--text2); border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab .tab-count {
+    background: var(--surface2); border-radius: 10px; padding: 1px 8px;
+    font-size: 12px; font-weight: 400;
+}
+
 .rel-arrow { color: var(--accent); font-weight: 600; }
 
 .graph-container {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 10px; padding: 24px; margin-bottom: 24px;
 }
+.project-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 8px 24px; display: flex; align-items: center; gap: 12px;
+    font-size: 13px; color: var(--text2);
+}
+.project-bar a { color: var(--accent); text-decoration: none; font-weight: 500; }
+.project-bar a:hover { text-decoration: underline; }
+.project-bar .proj-name { color: var(--text); font-weight: 600; }
+.project-bar .clear-btn {
+    color: var(--text2); font-size: 12px; margin-left: 4px;
+    cursor: pointer; text-decoration: none;
+}
+.project-bar .clear-btn:hover { color: var(--red); }
+
+.project-card {
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: 12px; padding: 24px; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.project-card:hover { border-color: var(--accent); background: rgba(99,102,241,0.08); transform: translateY(-2px); }
+.project-card .proj-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.project-card .proj-id { font-size: 13px; color: var(--text2); }
+.project-card .proj-desc { font-size: 13px; color: var(--text2); margin-top: 8px; }
+
 .graph-node {
     display: inline-block; background: var(--surface2);
     border: 2px solid var(--border); border-radius: 8px;
     padding: 8px 16px; margin: 4px; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    user-select: none;
 }
+.graph-node:hover { border-color: var(--accent); background: rgba(99,102,241,0.15); }
+.graph-node.active { border-color: var(--accent); background: rgba(99,102,241,0.25); box-shadow: 0 0 0 2px var(--accent); }
+.rel-row-hidden { display: none; }
 .graph-edge {
     padding: 4px 0; font-size: 13px; color: var(--text2);
 }
@@ -194,16 +237,74 @@ _TABLE_LABELS = {
     "learning_feedback": "学习反馈",
 }
 
+_COLUMN_LABELS = {
+    "id": "ID",
+    "name": "名称",
+    "description": "描述",
+    "project_id": "项目ID",
+    "module_id": "模块ID",
+    "title": "标题",
+    "content": "内容",
+    "source_url": "来源链接",
+    "source_file": "来源文件",
+    "entry_type": "条目类型",
+    "tags": "标签",
+    "related_modules": "关联模块",
+    "kb_type": "库类型",
+    "kb_root": "知识库路径",
+    "output_dir": "输出目录",
+    "imported_at": "导入时间",
+    "created_at": "创建时间",
+    "updated_at": "更新时间",
+    "file": "文件",
+    "covers": "覆盖范围",
+    "required_skills": "所需技能",
+    "extra_tags": "附加标签",
+    "test_focus": "测试重点",
+    "from_module": "源模块",
+    "to_module": "目标模块",
+    "type": "类型",
+    "risk_level": "风险等级",
+    "group_name": "分组名称",
+    "term": "词条",
+    "feature_name": "功能名称",
+    "design_json": "设计数据",
+    "test_point_count": "测试点数",
+    "test_case_count": "用例数",
+    "capability_hits": "能力命中",
+    "project_hits": "项目命中",
+    "feedback_type": "反馈类型",
+    "source_design_id": "来源设计ID",
+    "routed_to": "路由至",
+    "applied": "已应用",
+    "snippet": "摘要",
+}
 
-def _nav_html(active_path: str) -> str:
+
+def _nav_html(active_path: str, project: str = "") -> str:
+    qs = f"?project={urllib.parse.quote(project)}" if project else ""
     items = []
     for href, label in _NAV_ITEMS:
+        link = f"{href}{qs}" if href != "/" else href
         cls = ' class="active"' if active_path == href else ""
-        items.append(f'<a href="{href}"{cls}>{label}</a>')
+        items.append(f'<a href="{link}"{cls}>{label}</a>')
     return "\n".join(items)
 
 
-def _layout(title: str, body: str, active_path: str = "/") -> str:
+def _project_bar_html(project: str, project_name: str, active_path: str) -> str:
+    if not project:
+        return ""
+    clear_href = active_path if active_path else "/"
+    return f"""<div class="project-bar">
+        <span>当前项目：</span>
+        <span class="proj-name">{_e(project_name or project)}</span>
+        <a class="clear-btn" href="{clear_href}" title="清除项目筛选">✕ 清除</a>
+    </div>"""
+
+
+def _layout(title: str, body: str, active_path: str = "/",
+            project: str = "", project_name: str = "") -> str:
+    proj_bar = _project_bar_html(project, project_name, active_path)
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -215,12 +316,14 @@ def _layout(title: str, body: str, active_path: str = "/") -> str:
 <body>
 <div class="topbar">
     <h1>KNG 知识库查看器</h1>
-    <nav>{_nav_html(active_path)}</nav>
+    <nav>{_nav_html(active_path, project)}</nav>
     <form class="search-box" action="/search" method="get">
+        {"<input type='hidden' name='project' value='" + _e(project) + "'>" if project else ""}
         <input type="text" name="q" placeholder="搜索知识库...">
         <button type="submit">搜索</button>
     </form>
 </div>
+{proj_bar}
 <div class="container">
 {body}
 </div>
@@ -251,6 +354,15 @@ def _tags_html(tags_json: str) -> str:
 
 _RISK_LABELS = {"high": "高", "medium": "中", "low": "低"}
 _KB_TYPE_LABELS = {"capability": "能力库", "project": "项目库"}
+_ENTRY_TYPE_LABELS = {
+    "requirement": "需求",
+    "architecture": "架构",
+    "test_point": "测试点",
+    "issue": "缺陷",
+    "guideline": "规范",
+    "playbook": "剧本",
+    "general": "通用",
+}
 
 
 def _risk_badge(level: str) -> str:
@@ -303,36 +415,77 @@ def page_dashboard(db: sqlite3.Connection) -> str:
     return _layout("总览", body, "/")
 
 
-def page_table(db: sqlite3.Connection, table: str, page: int = 1, per_page: int = 50) -> str:
-    allowed = {
-        "projects", "modules", "module_relations", "kb_entries",
-        "skills", "skill_scenarios", "synonyms", "test_designs", "learning_feedback",
-    }
-    if table not in allowed:
-        return _layout("404", '<div class="empty">未找到该表</div>')
+_PROJECT_FILTERABLE = {"modules", "module_relations", "kb_entries", "test_designs", "learning_feedback"}
 
-    total = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    offset = (page - 1) * per_page
-    cur = db.execute(f"SELECT * FROM {table} LIMIT ? OFFSET ?", (per_page, offset))
-    cols = [desc[0] for desc in cur.description] if cur.description else []
-    rows = cur.fetchall()
 
-    if not rows:
-        table_label = _TABLE_LABELS.get(table, table)
-        body = f'<h2>{_e(table_label)}</h2><div class="empty">暂无数据</div>'
-        return _layout(table_label, body, f"/table/{table}")
+def _get_project_name(db: sqlite3.Connection, project_id: str) -> str:
+    if not project_id:
+        return ""
+    row = db.execute("SELECT name FROM projects WHERE id=?", (project_id,)).fetchone()
+    return row["name"] if row else project_id
 
-    header = "".join(f"<th>{_e(c)}</th>" for c in cols)
+
+def page_projects(db: sqlite3.Connection) -> str:
+    projects = db.execute("SELECT id, name, description FROM projects ORDER BY id").fetchall()
+    if not projects:
+        body = '<h2>项目</h2><div class="empty">暂无项目</div>'
+        return _layout("项目", body, "/table/projects")
+
+    cards = []
+    for p in projects:
+        desc = _e(p["description"]) if p["description"] else '<span style="color:var(--text2)">暂无描述</span>'
+        cards.append(f"""
+        <a href="/table/kb_entries?project={urllib.parse.quote(p['id'])}" style="text-decoration:none;color:inherit">
+            <div class="project-card">
+                <div class="proj-title">{_e(p['name'])}</div>
+                <div class="proj-id">ID: {_e(p['id'])}</div>
+                <div class="proj-desc">{desc}</div>
+            </div>
+        </a>""")
+
+    body = f"""
+    <h2>项目 <span style="color:var(--text2);font-size:16px">（共 {len(projects)} 个）</span></h2>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:16px">点击项目查看其知识库内容</p>
+    <div class="grid">{"".join(cards)}</div>
+    """
+    return _layout("项目", body, "/table/projects")
+
+
+def _tags_html_translated(tags_json: str, name_map: Dict[str, str]) -> str:
+    try:
+        tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+    except (json.JSONDecodeError, TypeError):
+        return _e(str(tags_json))
+    if not tags:
+        return '<span style="color:var(--text2)">—</span>'
+    return " ".join(
+        f'<span class="tag">{_e(name_map.get(t, t))}</span>' for t in tags
+    )
+
+
+def _render_table_rows(cur, rows, table: str, hidden_cols: set,
+                       module_names: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
+    """Render table header + tbody HTML from cursor metadata and rows."""
+    all_cols = [desc[0] for desc in cur.description] if cur.description else []
+    cols = [c for c in all_cols if c not in hidden_cols]
+    col_indices = [i for i, c in enumerate(all_cols) if c not in hidden_cols]
+    mod_map = module_names or {}
+
+    header = "".join(f"<th>{_e(_COLUMN_LABELS.get(c, c))}</th>" for c in cols)
     tbody = []
     for row in rows:
         cells = []
-        for i, col in enumerate(cols):
+        for i, col in zip(col_indices, cols):
             val = row[i]
             if col == "id" and table == "kb_entries":
                 cells.append(f'<td><a href="/entry/{val}">{_e(val)}</a></td>')
             elif col in ("content", "design_json", "snippet"):
-                cells.append(f"<td>{_e(_truncate(str(val), 200))}</td>")
-            elif col in ("tags", "covers", "related_modules", "required_skills",
+                cells.append(f"<td>{_e(_truncate(str(val), 60))}</td>")
+            elif col == "entry_type" and val:
+                cells.append(f"<td>{_e(_ENTRY_TYPE_LABELS.get(val, val))}</td>")
+            elif col == "related_modules" and mod_map:
+                cells.append(f"<td>{_tags_html_translated(val, mod_map)}</td>")
+            elif col in ("tags", "covers", "required_skills",
                          "extra_tags", "test_focus", "capability_hits",
                          "project_hits", "routed_to"):
                 cells.append(f"<td>{_tags_html(val)}</td>")
@@ -343,19 +496,146 @@ def page_table(db: sqlite3.Connection, table: str, page: int = 1, per_page: int 
             else:
                 cells.append(f"<td>{_e(val)}</td>")
         tbody.append(f"<tr>{''.join(cells)}</tr>")
+    return header, "".join(tbody)
+
+
+def page_kb(db: sqlite3.Connection, page: int = 1, per_page: int = 50,
+            project: str = "", kb_type: str = "project") -> str:
+    project_name = _get_project_name(db, project)
+
+    where_parts = ["kb_type=?"]
+    params: list = [kb_type]
+    if project and kb_type != "capability":
+        where_parts.append("project_id=?")
+        params.append(project)
+    where = " AND ".join(where_parts)
+
+    total = db.execute(f"SELECT COUNT(*) FROM kb_entries WHERE {where}", params).fetchone()[0]
+    offset_val = (page - 1) * per_page
+    cur = db.execute(f"SELECT * FROM kb_entries WHERE {where} LIMIT ? OFFSET ?",
+                     params + [per_page, offset_val])
+    rows = cur.fetchall()
+
+    hidden = {"created_at", "updated_at", "imported_at", "kb_type", "source_file", "source_url"}
+    if project:
+        hidden.add("project_id")
+    if kb_type == "capability":
+        hidden.update({"project_id", "module_id", "tags", "related_modules"})
+
+    cap_count = db.execute(
+        "SELECT COUNT(*) FROM kb_entries WHERE kb_type='capability'"
+    ).fetchone()[0]
+    proj_count = db.execute(
+        "SELECT COUNT(*) FROM kb_entries WHERE kb_type='project'"
+        + (" AND project_id=?" if project else ""),
+        [project] if project else [],
+    ).fetchone()[0]
+
+    qs_proj = f"&project={urllib.parse.quote(project)}" if project else ""
+    proj_active = "active" if kb_type == "project" else ""
+    cap_active = "active" if kb_type == "capability" else ""
+
+    tabs_html = f"""
+    <div class="tabs">
+        <a class="tab {proj_active}" href="/table/kb_entries?kb_type=project{qs_proj}">
+            项目知识库 <span class="tab-count">{proj_count}</span>
+        </a>
+        <a class="tab {cap_active}" href="/table/kb_entries?kb_type=capability{qs_proj}">
+            能力知识库 <span class="tab-count">{cap_count}</span>
+        </a>
+    </div>
+    """
+
+    tab_label = "项目知识库" if kb_type == "project" else "能力知识库"
+
+    mod_map = {r["module_id"]: r["name"] for r in
+               db.execute("SELECT module_id, name FROM modules").fetchall()}
+
+    if not rows:
+        body = f'<h2>知识库</h2>{tabs_html}<div class="empty">暂无数据</div>'
+        return _layout("知识库", body, "/table/kb_entries", project, project_name)
+
+    header, tbody_html = _render_table_rows(cur, rows, "kb_entries", hidden, mod_map)
 
     total_pages = (total + per_page - 1) // per_page
-    pag = _pagination(page, total_pages, f"/table/{table}")
+    pag_base = f"/table/kb_entries?kb_type={kb_type}"
+    if project:
+        pag_base += f"&project={urllib.parse.quote(project)}"
+    pag = ""
+    if total_pages > 1:
+        parts = ['<div class="pagination">']
+        if page > 1:
+            parts.append(f'<a href="{pag_base}&page={page-1}">&laquo; 上一页</a>')
+        parts.append(f"<span>第 {page} / {total_pages} 页</span>")
+        if page < total_pages:
+            parts.append(f'<a href="{pag_base}&page={page+1}">下一页 &raquo;</a>')
+        parts.append("</div>")
+        pag = "".join(parts)
 
-    table_label = _TABLE_LABELS.get(table, table)
     body = f"""
-    <h2>{_e(table_label)} <span style="color:var(--text2);font-size:16px">（共 {total} 条）</span></h2>
+    <h2>知识库</h2>
+    {tabs_html}
+    <h3>{_e(tab_label)} <span style="color:var(--text2);font-size:14px">（共 {total} 条）</span></h3>
     <div style="overflow-x:auto">
-        <table><thead><tr>{header}</tr></thead><tbody>{"".join(tbody)}</tbody></table>
+        <table><thead><tr>{header}</tr></thead><tbody>{tbody_html}</tbody></table>
     </div>
     {pag}
     """
-    return _layout(table_label, body, f"/table/{table}")
+    return _layout("知识库", body, "/table/kb_entries", project, project_name)
+
+
+def page_table(db: sqlite3.Connection, table: str, page: int = 1,
+               per_page: int = 50, project: str = "", kb_type: str = "") -> str:
+    allowed = {
+        "projects", "modules", "module_relations", "kb_entries",
+        "skills", "skill_scenarios", "synonyms", "test_designs", "learning_feedback",
+    }
+    if table not in allowed:
+        return _layout("404", '<div class="empty">未找到该表</div>')
+
+    if table == "projects":
+        return page_projects(db)
+
+    if table == "kb_entries":
+        return page_kb(db, page, per_page, project, kb_type or "project")
+
+    project_name = _get_project_name(db, project)
+
+    has_project_col = table in _PROJECT_FILTERABLE
+    if project and has_project_col:
+        total = db.execute(f"SELECT COUNT(*) FROM {table} WHERE project_id=?", (project,)).fetchone()[0]
+        offset_val = (page - 1) * per_page
+        cur = db.execute(f"SELECT * FROM {table} WHERE project_id=? LIMIT ? OFFSET ?",
+                         (project, per_page, offset_val))
+    else:
+        total = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        offset_val = (page - 1) * per_page
+        cur = db.execute(f"SELECT * FROM {table} LIMIT ? OFFSET ?", (per_page, offset_val))
+
+    hidden_cols = {"created_at", "updated_at", "imported_at"}
+    if project and has_project_col:
+        hidden_cols.add("project_id")
+
+    rows = cur.fetchall()
+    table_label = _TABLE_LABELS.get(table, table)
+
+    if not rows:
+        body = f'<h2>{_e(table_label)}</h2><div class="empty">暂无数据</div>'
+        return _layout(table_label, body, f"/table/{table}", project, project_name)
+
+    header, tbody_html = _render_table_rows(cur, rows, table, hidden_cols)
+
+    total_pages = (total + per_page - 1) // per_page
+    pag = _pagination(page, total_pages, f"/table/{table}", project)
+
+    body = f"""
+    <h2>{_e(table_label)} <span style="color:var(--text2);font-size:16px">（共 {total} 条）</span></h2>
+    <div style="overflow-x:auto">
+        <table><thead><tr>{header}</tr></thead><tbody>{tbody_html}</tbody></table>
+    </div>
+    {pag}
+    """
+    return _layout(table_label, body, f"/table/{table}", project, project_name)
 
 
 def page_entry(db: sqlite3.Connection, entry_id: int) -> str:
@@ -485,8 +765,12 @@ def page_modules(db: sqlite3.Connection) -> str:
             (pid,),
         ).fetchall()
 
+        mod_name_map = {m["module_id"]: m["name"] for m in modules}
+
         mod_list = "".join(
-            f'<span class="graph-node">{_e(m["module_id"])}: {_e(m["name"])}</span>'
+            f'<span class="graph-node" data-module="{_e(m["module_id"])}" '
+            f'onclick="toggleModuleFilter(this)">'
+            f'{_e(m["name"])}</span>'
             for m in modules
         )
 
@@ -499,10 +783,12 @@ def page_modules(db: sqlite3.Connection) -> str:
         }
         for r in relations:
             sym = type_symbols.get(r["type"], r["type"])
-            rel_rows.append(f"""<tr>
-                <td>{_e(r['from_module'])}</td>
+            from_name = mod_name_map.get(r["from_module"], r["from_module"])
+            to_name = mod_name_map.get(r["to_module"], r["to_module"])
+            rel_rows.append(f"""<tr data-from="{_e(r['from_module'])}" data-to="{_e(r['to_module'])}">
+                <td>{_e(from_name)}</td>
                 <td class="rel-arrow">{_e(sym)}</td>
-                <td>{_e(r['to_module'])}</td>
+                <td>{_e(to_name)}</td>
                 <td>{_risk_badge(r['risk_level'])}</td>
                 <td>{_e(r['description'] or '—')}</td>
             </tr>""")
@@ -510,7 +796,10 @@ def page_modules(db: sqlite3.Connection) -> str:
         rel_table = ""
         if rel_rows:
             rel_table = f"""
-            <table>
+            <div style="margin-bottom:8px">
+                <span id="filter-hint-{_e(pid)}" style="font-size:13px;color:var(--text2)"></span>
+            </div>
+            <table id="rel-table-{_e(pid)}">
             <thead><tr><th>源模块</th><th>关系</th><th>目标模块</th><th>风险</th><th>说明</th></tr></thead>
             <tbody>{"".join(rel_rows)}</tbody>
             </table>"""
@@ -519,8 +808,11 @@ def page_modules(db: sqlite3.Connection) -> str:
 
         sections.append(f"""
         <h3>项目：{_e(pid)} — {_e(proj['name'])}</h3>
-        <div class="graph-container">
-            <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">模块（{len(modules)} 个）</div>
+        <div class="graph-container" data-project="{_e(pid)}">
+            <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">
+                模块（{len(modules)} 个）
+                <span style="margin-left:8px;color:var(--text2);font-size:12px">— 点击模块筛选关联关系</span>
+            </div>
             {mod_list or '<span style="color:var(--text2)">暂无模块</span>'}
         </div>
         {rel_table}
@@ -530,22 +822,64 @@ def page_modules(db: sqlite3.Connection) -> str:
     if not projects:
         sections.append('<div class="empty">数据库中暂无项目</div>')
 
+    filter_script = """
+    <script>
+    function toggleModuleFilter(el) {
+        var mid = el.getAttribute('data-module');
+        var container = el.closest('[data-project]');
+        var pid = container.getAttribute('data-project');
+        var wasActive = el.classList.contains('active');
+
+        container.querySelectorAll('.graph-node').forEach(function(n) {
+            n.classList.remove('active');
+        });
+
+        var table = document.getElementById('rel-table-' + pid);
+        var hint = document.getElementById('filter-hint-' + pid);
+        if (!table) return;
+        var rows = table.querySelectorAll('tbody tr');
+
+        if (wasActive) {
+            rows.forEach(function(r) { r.classList.remove('rel-row-hidden'); });
+            if (hint) hint.textContent = '';
+        } else {
+            el.classList.add('active');
+            var shown = 0;
+            rows.forEach(function(r) {
+                var from = r.getAttribute('data-from');
+                var to = r.getAttribute('data-to');
+                if (from === mid || to === mid) {
+                    r.classList.remove('rel-row-hidden');
+                    shown++;
+                } else {
+                    r.classList.add('rel-row-hidden');
+                }
+            });
+            var label = el.textContent.trim();
+            if (hint) hint.textContent = '筛选：' + label + '（' + shown + ' 条关联）· 再次点击清除筛选';
+        }
+    }
+    </script>
+    """
+
     body = f"""
     <h2>模块关联图谱</h2>
     {"".join(sections)}
+    {filter_script}
     """
     return _layout("模块关联", body, "/modules")
 
 
-def _pagination(page: int, total_pages: int, base_url: str) -> str:
+def _pagination(page: int, total_pages: int, base_url: str, project: str = "") -> str:
     if total_pages <= 1:
         return ""
+    extra = f"&project={urllib.parse.quote(project)}" if project else ""
     parts = ['<div class="pagination">']
     if page > 1:
-        parts.append(f'<a href="{base_url}?page={page-1}">&laquo; 上一页</a>')
+        parts.append(f'<a href="{base_url}?page={page-1}{extra}">&laquo; 上一页</a>')
     parts.append(f"<span>第 {page} / {total_pages} 页</span>")
     if page < total_pages:
-        parts.append(f'<a href="{base_url}?page={page+1}">下一页 &raquo;</a>')
+        parts.append(f'<a href="{base_url}?page={page+1}{extra}">下一页 &raquo;</a>')
     parts.append("</div>")
     return "".join(parts)
 
@@ -586,7 +920,9 @@ class KngViewerHandler(BaseHTTPRequestHandler):
             elif path.startswith("/table/"):
                 table = path[7:]
                 pg = int(params.get("page", "1"))
-                self._respond(200, page_table(db, table, page=pg))
+                proj = params.get("project", "")
+                kb_t = params.get("kb_type", "")
+                self._respond(200, page_table(db, table, page=pg, project=proj, kb_type=kb_t))
             elif path.startswith("/entry/"):
                 try:
                     eid = int(path[7:])

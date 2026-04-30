@@ -201,20 +201,20 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
      test_focus: [任务完成条件判定后奖励准确发放, 异常中断后奖励补发]
    ```
 
-6. **Distill and write KB entry**:
+6. **保留原始内容写入 KB 文件**:
 
-   Do NOT just dump the raw Feishu document content. Instead, distill it into a **test-oriented knowledge base entry**:
-   - Extract the key business rules, edge cases, important parameters, and state transitions
-   - Organize under clear headings that help test designers find relevant info
-   - Keep the original terminology but remove irrelevant fluff (meeting notes, formatting artifacts)
-   - Add a metadata header:
-     ```markdown
-     # {module_name} — {topic}
-     <!-- source: {feishu_url} -->
-     <!-- module: {module_id} -->
-     <!-- imported: {date} -->
-     <!-- related_modules: {comma-separated list of modules this doc references} -->
-     ```
+   **禁止对文档内容进行蒸馏、精简或重组。** 必须完整保留 Feishu 文档的原始内容（包括表格、列表、备注、标注等），仅在文件顶部添加元数据头。原始内容中的格式标记（`<lark-table>`、`<image>`、`<text>` 等）也应原样保留。
+
+   文件格式：
+   ```markdown
+   # {document_title}
+   <!-- source: {feishu_url} -->
+   <!-- module: {module_id} -->
+   <!-- imported: {date} -->
+   <!-- related_modules: {comma-separated list of modules this doc references} -->
+
+   {原始文档内容，不做任何删减或改写}
+   ```
 
    Write to: `${KB_ROOT}/projects/<project-id>/<filename>.md`
 
@@ -227,10 +227,42 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
      --project-id "${PROJECT_ID}" --force
    ```
 
-8. **Report**: Show:
+8. **文档审查反馈**:
+
+   导入完成后，回顾文档原始内容，从 QA / 测试设计的专业视角给出反馈。**不修改已写入的文件内容**，仅以文字形式向用户报告发现的问题。重点关注以下方面：
+
+   - **规则矛盾或歧义**：文档内不同章节对同一规则的描述是否存在冲突或模糊之处
+   - **边界条件缺失**：关键数值、状态转换、异常流程是否缺少边界定义（如上限/下限、超时处理、并发场景）
+   - **待确认事项**：文档中标记为"待定"、"待确认"、"TBD"等未决项，汇总列出
+   - **跨系统接口风险**：与其他系统的交互点是否定义清晰，是否存在数据一致性风险
+   - **可测试性问题**：是否有难以验证的描述（如"体验良好"、"合理范围"等模糊表述），或缺少可量化的验收标准
+
+   输出格式：
+   ```
+   ## 📋 文档审查反馈
+
+   ### ⚠️ 规则矛盾 / 歧义 (N 项)
+   1. 第X章提到"..."，但第Y章描述为"..."，存在冲突
+
+   ### 🔍 边界条件缺失 (N 项)
+   1. XX功能未定义当 YY 为 0 / 负数 / 超上限时的处理逻辑
+
+   ### 📌 待确认事项 (N 项)
+   1. [第X章] "具体数值待定"
+
+   ### ⚡ 跨系统接口风险 (N 项)
+   1. 与XX系统的YY交互未定义失败回滚策略
+
+   ### 🎯 可测试性问题 (N 项)
+   1. "体验流畅"缺少量化标准
+   ```
+
+   如果某个类别没有发现问题，该类别可以省略。没有任何问题时输出"未发现明显问题"。
+
+9. **Report**: Show:
    - Saved file path
    - Detected/discovered module (with tag list if new)
-   - Content summary (key sections, number of business rules extracted)
+   - Content summary (document sections overview)
    - If a new module was registered: "新模块已添加到 project-modules.yaml"
    - If new relations were discovered:
      ```
