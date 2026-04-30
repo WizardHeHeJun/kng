@@ -245,6 +245,54 @@ If it already exists, update the `active_project` field to `${PROJECT_ID}` using
 
 This ensures that subsequent `/kng-test`, `/kng-kb`, `/kng-evolve` invocations automatically use the newly created project without requiring `--project`.
 
+## Step 7a: Auto-generate Capability Index
+
+Automatically generate `skill-registry.yaml` and `synonym-aliases.yaml` from the capability skill files. This ensures the toolbox is properly indexed regardless of which skills the user has provided.
+
+### 7a-1. Generate skill-registry.yaml
+
+Run the registry generator to scan all `.md` files in the capability directory, identify callable skills (by `可调用技能` or `## 触发条件` markers), and extract metadata:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/generate_registry.py" \
+  "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+  --verbose
+```
+
+This produces `skill-registry.yaml` with a `skills:` section auto-populated from the skill files. If the file already existed and contained a `scenarios:` section, those scenarios are preserved.
+
+### 7a-2. Generate synonym-aliases.yaml
+
+Read the generated `skill-registry.yaml` and collect all `tags` across all skills. Then generate `synonym-aliases.yaml` by expanding each tag group into synonyms:
+
+1. Read the `tags` from all skills in the generated registry
+2. For each semantically distinct concept, create a synonym group with:
+   - The original Chinese term
+   - Common Chinese synonyms and abbreviations
+   - English equivalent(s) if applicable
+3. Merge groups that overlap semantically
+
+Write the result to `${CLAUDE_PLUGIN_ROOT}/kb/capability/synonym-aliases.yaml` in this format:
+
+```yaml
+# Synonym/Alias Groups for KB Retrieval
+# 由 /kng-init 从 skill-registry.yaml 的 tags 自动生成
+# Used by retrieve_kb.py to bridge vocabulary gaps in queries
+
+groups:
+  - name: group_name
+    terms: [term1, term2, term3, english_term]
+```
+
+**Guidelines for synonym generation**:
+- Each group should have 3-6 terms
+- Include both formal and colloquial terms (e.g., 网络操作 ↔ 联网 ↔ network)
+- Include English translations for technical terms
+- Don't create groups for overly generic terms (e.g., "设计", "测试")
+- Focus on domain-specific vocabulary that users might search with
+
+If `synonym-aliases.yaml` already exists, regenerate it from the current tags (the file is always derivable from the skills).
+
 ## Step 7b: Initialize & Populate Database
 
 Initialize the SQLite database and import all flat KB files into it. This enables faster retrieval and structured queries for large projects.

@@ -40,6 +40,10 @@ Desktop.ini
 # 编号QA能力知识文件（个人经验沉淀）
 kng-plugin/kb/capability/[0-9][0-9]-*.md
 
+# 自动生成的索引文件（由 generate_registry.py 和 /kng-init 生成）
+kng-plugin/kb/capability/skill-registry.yaml
+kng-plugin/kb/capability/synonym-aliases.yaml
+
 # 项目知识库（用户按自己项目填充）
 kng-plugin/kb/projects/
 /kb/
