@@ -38,7 +38,8 @@ Desktop.ini
 # ── 个人知识库内容（用户自行导入，不上传） ──
 
 # 能力库（用户自行提供技能文件 + 自动生成的索引）
-kng-plugin/kb/capability/
+kng-plugin/kb/capability/*
+!kng-plugin/kb/capability/.gitkeep
 
 # 项目知识库（用户按自己项目填充）
 kng-plugin/kb/projects/
