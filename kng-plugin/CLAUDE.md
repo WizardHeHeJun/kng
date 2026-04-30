@@ -1,7 +1,3 @@
-<claude-mem-context>
-
-</claude-mem-context>
-
 # KNG Plugin — 全局行为
 
 ## 知识库查看器自启动
