@@ -17,14 +17,17 @@ Extract from `$ARGUMENTS`:
 - `url` (required): The Feishu/Lark document URL
 - `--project <id>` (optional): Project identifier for ONE-TIME override (does not change active project)
 
-Set defaults:
-- `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
-- `OUTPUT_DIR` = `./test-output` (or from `kng.config.json` → `output_dir`)
-- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+Resolve the data directory:
+- `KNG_HOME` = `$KNG_HOME` (if env var set) || `$HOME/.kng-plugin`
+- Read `${KNG_HOME}/kng.config.json` (if exists)
+- `KB_ROOT` = config `kb_root` || `${KNG_HOME}/kb`
+- `CAPABILITY_DIR` = `${KNG_HOME}/kb/capability`
+- `DB_PATH` = config `db_path` (if set)
+- `OUTPUT_DIR` = config `output_dir` || `./test-output` (relative to CWD)
 
 ### Storage Mode Detection
 
-Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+Read `${KNG_HOME}/kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
 All subsequent KB operations branch on this. DB mode uses `retrieve_kb.py --db` and `db.py`; file mode uses flat files as before.
 
 ### Project Context Protocol (shared across all KNG skills)
@@ -37,14 +40,14 @@ This protocol ensures a project knowledge base is always active. Follow it exact
 
 **If `--project` was NOT provided**, resolve the active project:
 
-1. **Read config**: Check if `kng.config.json` exists in the workspace root.
+1. **Read config**: Check if `${KNG_HOME}/kng.config.json` exists.
    - If it has `active_project` (or legacy `default_project`) AND `${KB_ROOT}/projects/${active_project}/` exists → use it. Display: `📂 当前项目知识库: {project_id}` and proceed.
 
 2. **No config or no active project set** → auto-detect:
    a. Use Glob to list subdirectories in `${KB_ROOT}/projects/` that contain `.md` or `.yaml` files.
    b. **ZERO projects found**: Inform user "尚未创建任何项目知识库" and invoke `/kng-init` via Skill tool. After creation, the new project becomes active (kng-init handles this). Re-read config and proceed.
-   c. **ONE project found**: Auto-select it. Write/update `kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
-   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
+   c. **ONE project found**: Auto-select it. Write/update `${KNG_HOME}/kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
+   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `${KNG_HOME}/kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
 
 3. After resolving, set `PROJECT_ID` to the resolved value and continue.
 
@@ -67,7 +70,7 @@ Capture the stdout as the document content. If the command fails:
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/retrieve_kb.py" \
   --query-file /dev/stdin \
-  --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+  --capability-dir "${KNG_HOME}/kb/capability" \
   --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
   --top-k 5 \
   <<< "DOCUMENT_CONTENT_HERE"
@@ -105,7 +108,7 @@ The capability knowledge base contains **callable skills** — each one is a foc
 
 Read the skill registry:
 ```bash
-cat "${CLAUDE_PLUGIN_ROOT}/kb/capability/skill-registry.yaml"
+cat "${KNG_HOME}/kb/capability/skill-registry.yaml"
 ```
 
 Or in DB mode, query skills:
@@ -144,7 +147,7 @@ For each selected skill, read its full procedure file and apply it to the docume
 
 For each selected skill, read its capability KB file:
 ```
-${CLAUDE_PLUGIN_ROOT}/kb/capability/{skill.file}
+${KNG_HOME}/kb/capability/{skill.file}
 ```
 
 Each skill file contains:

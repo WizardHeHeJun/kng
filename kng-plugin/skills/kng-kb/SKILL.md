@@ -17,13 +17,16 @@ Before parsing sub-commands, resolve the active project knowledge base.
 
 ### Project Context Protocol (shared across all KNG skills)
 
-Set defaults:
-- `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
-- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+Resolve the data directory:
+- `KNG_HOME` = `$KNG_HOME` (if env var set) || `$HOME/.kng-plugin`
+- Read `${KNG_HOME}/kng.config.json` (if exists)
+- `KB_ROOT` = config `kb_root` || `${KNG_HOME}/kb`
+- `CAPABILITY_DIR` = `${KNG_HOME}/kb/capability`
+- `DB_PATH` = config `db_path` (if set)
 
 ### Storage Mode Detection
 
-Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+Read `${KNG_HOME}/kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
 In DB mode, list/add/import operations go through `db.py` and `kb_import.py` scripts instead of direct file manipulation. The flat KB files still exist as source-of-truth for version control; the DB is a derived index.
 
 **If `--project <id>` was provided in any sub-command:**
@@ -32,14 +35,14 @@ In DB mode, list/add/import operations go through `db.py` and `kb_import.py` scr
 
 **If `--project` was NOT provided**, resolve the active project:
 
-1. **Read config**: Check if `kng.config.json` exists in the workspace root.
+1. **Read config**: Check if `${KNG_HOME}/kng.config.json` exists.
    - If it has `active_project` (or legacy `default_project`) AND `${KB_ROOT}/projects/${active_project}/` exists → use it. Display: `📂 当前项目知识库: {project_id}` and proceed.
 
 2. **No config or no active project set** → auto-detect:
    a. Use Glob to list subdirectories in `${KB_ROOT}/projects/` that contain `.md` or `.yaml` files.
    b. **ZERO projects found**: Inform user "尚未创建任何项目知识库" and invoke `/kng-init` via Skill tool. After creation, the new project becomes active (kng-init handles this). Re-read config and proceed.
-   c. **ONE project found**: Auto-select it. Write/update `kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
-   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
+   c. **ONE project found**: Auto-select it. Write/update `${KNG_HOME}/kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
+   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `${KNG_HOME}/kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
 
 3. After resolving, set `PROJECT_ID` to the resolved value and continue to sub-command parsing.
 
@@ -61,9 +64,9 @@ List all knowledge base files.
 
 #### File mode:
 
-1. **Capability KB**: Use Glob to find all files in `${CLAUDE_PLUGIN_ROOT}/kb/capability/`. List each file with its size and first-line summary.
+1. **Capability KB**: Use Glob to find all files in `${KNG_HOME}/kb/capability/`. List each file with its size and first-line summary.
 
-2. **Project KB**: Read `kng.config.json` to find `kb_root` (default `./kb`). Use Glob to find all files under `${KB_ROOT}/projects/`. Group by project.
+2. **Project KB**: Read `${KNG_HOME}/kng.config.json` to find `kb_root`. Use Glob to find all files under `${KB_ROOT}/projects/`. Group by project.
 
 3. **Module index**: If `project-modules.yaml` exists for a project, read it and show the registered modules.
 
@@ -75,7 +78,7 @@ List all knowledge base files.
 
 #### Output (both modes):
    ```
-   ## 基础能力库 (${CLAUDE_PLUGIN_ROOT}/kb/capability/)
+   ## 基础能力库 (${KNG_HOME}/kb/capability/)
    - test-design-guidelines.md (23 lines) — 测试设计通用规范
    - api-test-script-playbook.md (23 lines) — 接口自动化脚本作业手册
 
@@ -111,13 +114,13 @@ Interactively create a new knowledge base entry.
 4. Generate a well-structured Markdown file based on the user's input.
 5. Determine the file name: use module prefix for project entries (e.g., `battle-skill-system.md`, `reward-settlement.md`). For `general` module, no prefix needed.
 6. Write the file:
-   - capability → `${CLAUDE_PLUGIN_ROOT}/kb/capability/<filename>.md`
+   - capability → `${KNG_HOME}/kb/capability/<filename>.md`
    - project → `${KB_ROOT}/projects/<project-id>/<filename>.md`
 7. **DB mode sync**: If in DB mode, after writing the file, re-import it into the database:
    ```bash
    python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
      --db "${DB_PATH}" \
-     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --capability-dir "${KNG_HOME}/kb/capability" \
      --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
      --project-id "${PROJECT_ID}" --force
    ```
@@ -222,7 +225,7 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
    ```bash
    python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
      --db "${DB_PATH}" \
-     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --capability-dir "${KNG_HOME}/kb/capability" \
      --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
      --project-id "${PROJECT_ID}" --force
    ```
@@ -275,6 +278,6 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 
 ## Notes
 
-- When adding to capability KB (plugin directory), note that these changes may be overwritten on plugin update. For persistent custom capability entries, consider adding them to a workspace-local capability directory if configured.
+- Capability KB files are stored in `${KNG_HOME}/kb/capability/` and persist across plugin updates.
 - Always use UTF-8 encoding when writing files.
 - KB files should follow Markdown format with clear headings for maximum retrieval effectiveness.

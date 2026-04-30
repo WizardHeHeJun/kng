@@ -4,6 +4,7 @@
 const { execSync, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const PLUGIN_NAME = "kng";
 const REPO_URL = "https://github.com/WizardHeHeJun/kng.git";
@@ -27,6 +28,34 @@ function warn(msg) {
 }
 function error(msg) {
   console.error(`${RED}[kng]${RESET} ${msg}`);
+}
+
+function getKngHome() {
+  return process.env.KNG_HOME || path.join(os.homedir(), ".kng-plugin");
+}
+
+function scaffoldKngHome() {
+  const kngHome = getKngHome();
+  log(`Setting up data directory: ${kngHome}\n`);
+
+  fs.mkdirSync(path.join(kngHome, "kb", "capability"), { recursive: true });
+  fs.mkdirSync(path.join(kngHome, "kb", "projects"), { recursive: true });
+
+  const configPath = path.join(kngHome, "kng.config.json");
+  if (!fs.existsSync(configPath)) {
+    const config = {
+      active_project: "",
+      kb_root: path.join(kngHome, "kb").replace(/\\/g, "/"),
+      output_dir: "./test-output",
+      db_path: path.join(kngHome, "kng.db").replace(/\\/g, "/"),
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    success(`Created config: ${configPath}`);
+  } else {
+    warn("Config already exists, skipping.");
+  }
+
+  success(`Data directory ready: ${kngHome}\n`);
 }
 
 function findClaude() {
@@ -98,10 +127,17 @@ function install() {
     }
   }
 
+  // Step 3: Scaffold data directory
+  scaffoldKngHome();
+
+  const kngHome = getKngHome();
   console.log(`
 ${GREEN}========================================${RESET}
   KNG plugin installed!
 ${GREEN}========================================${RESET}
+
+  Data directory: ${CYAN}${kngHome}${RESET}
+  Override with:  KNG_HOME=/custom/path kng-plugin install
 
   Available commands in Claude Code:
 
@@ -161,6 +197,8 @@ One-shot (no global install):
 
 Legacy (from GitHub directly):
   npx github:WizardHeHeJun/kng install
+
+Data directory: ~/.kng-plugin/ (override with KNG_HOME env var)
 `);
 }
 

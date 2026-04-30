@@ -15,13 +15,16 @@ This skill closes the learning loop: after `/kng-test` generates a test design, 
 
 Before gathering context, resolve the active project knowledge base.
 
-Set defaults:
-- `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
-- `DB_PATH` = from `kng.config.json` → `db_path` (optional — if present, enables **DB mode**)
+Resolve the data directory:
+- `KNG_HOME` = `$KNG_HOME` (if env var set) || `$HOME/.kng-plugin`
+- Read `${KNG_HOME}/kng.config.json` (if exists)
+- `KB_ROOT` = config `kb_root` || `${KNG_HOME}/kb`
+- `CAPABILITY_DIR` = `${KNG_HOME}/kb/capability`
+- `DB_PATH` = config `db_path` (if set)
 
 ### Storage Mode Detection
 
-Read `kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
+Read `${KNG_HOME}/kng.config.json`. If `db_path` is set AND the file exists → **DB mode**. Otherwise → **file mode**.
 In DB mode, feedback is persisted to the `learning_feedback` table via `db.py`, and KB file updates are synced back to the DB via `kb_import.py`.
 
 ### Project Context Protocol (shared across all KNG skills)
@@ -32,14 +35,14 @@ In DB mode, feedback is persisted to the `learning_feedback` table via `db.py`, 
 
 **If `--project` was NOT provided**, resolve the active project:
 
-1. **Read config**: Check if `kng.config.json` exists in the workspace root.
+1. **Read config**: Check if `${KNG_HOME}/kng.config.json` exists.
    - If it has `active_project` (or legacy `default_project`) AND `${KB_ROOT}/projects/${active_project}/` exists → use it. Display: `📂 当前项目知识库: {project_id}` and proceed.
 
 2. **No config or no active project set** → auto-detect:
    a. Use Glob to list subdirectories in `${KB_ROOT}/projects/` that contain `.md` or `.yaml` files.
    b. **ZERO projects found**: Inform user "尚未创建任何项目知识库" and invoke `/kng-init` via Skill tool. After creation, the new project becomes active (kng-init handles this). Re-read config and proceed.
-   c. **ONE project found**: Auto-select it. Write/update `kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
-   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
+   c. **ONE project found**: Auto-select it. Write/update `${KNG_HOME}/kng.config.json` with `active_project` set to this project ID. Display: `📂 已自动选择项目知识库: {project_id}`
+   d. **MULTIPLE projects found**: List all projects with brief info (module count, file count). Ask user to choose. Write/update `${KNG_HOME}/kng.config.json` with their choice. Display: `📂 已选择项目知识库: {project_id}`
 
 3. After resolving, set `PROJECT_ID` to the resolved value and continue.
 
@@ -85,7 +88,7 @@ This surfaces past observations like "上次漏测了并发场景" or "结算接
 
 ### 1c. Load skill registry
 
-**File mode**: Read `${CLAUDE_PLUGIN_ROOT}/kb/capability/skill-registry.yaml` to understand:
+**File mode**: Read `${KNG_HOME}/kb/capability/skill-registry.yaml` to understand:
 - Which skills exist and what they cover (`skills[].covers`)
 - Which scenario templates are defined (`scenarios[].test_focus`)
 - Tags for routing feedback to the right file
@@ -265,7 +268,7 @@ After applying file edits, if in DB mode:
    ```bash
    python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
      --db "${DB_PATH}" \
-     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --capability-dir "${KNG_HOME}/kb/capability" \
      --project-dir "${KB_ROOT}/projects/${PROJECT_ID}" \
      --project-id "${PROJECT_ID}" --force
    ```

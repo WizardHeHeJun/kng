@@ -57,6 +57,8 @@ npx github:WizardHeHeJun/kng install
 
 安装后执行 `/reload-plugins` 激活。
 
+安装时会自动在 `~/.kng-plugin/` 下创建数据目录（可通过 `KNG_HOME` 环境变量自定义位置）。
+
 ### 卸载
 
 ```bash
@@ -95,10 +97,10 @@ npm uninstall -g kng-plugin
 
 | 知识库 | 位置 | 用途 | 更新方式 |
 |--------|------|------|----------|
-| **能力库** | `kng-plugin/kb/capability/` | 通用测试方法论、技能工具箱 | 用户自行维护 / `/kng-kb add` |
-| **项目库** | `kb/projects/<project-id>/` | 项目业务模块、架构设计、历史问题 | `/kng-kb add` / `/kng-kb import` / `/kng-evolve` |
+| **能力库** | `~/.kng-plugin/kb/capability/` | 通用测试方法论、技能工具箱 | 用户自行维护 / `/kng-kb add` |
+| **项目库** | `~/.kng-plugin/kb/projects/<project-id>/` | 项目业务模块、架构设计、历史问题 | `/kng-kb add` / `/kng-kb import` / `/kng-evolve` |
 
-能力库内容由用户自行提供，插件仓库仅保留目录占位。项目库按项目隔离，初始化后包含：
+所有知识库数据存放在 `~/.kng-plugin/` 下（可通过 `KNG_HOME` 环境变量自定义），不受插件更新影响。项目库按项目隔离，初始化后包含：
 
 - `project-overview.md` — 项目类型、核心系统、高风险区域
 - `project-modules.yaml` — 模块注册表与知识图谱（模块 + 关系）
@@ -107,30 +109,30 @@ npm uninstall -g kng-plugin
 
 ## 6. SQLite 存储层（可选）
 
-在 `kng.config.json` 中配置 `db_path` 即可启用，支持结构化查询、全文检索和模块关联图谱。
+在 `~/.kng-plugin/kng.config.json` 中配置 `db_path` 即可启用，支持结构化查询、全文检索和模块关联图谱。
 
 ### 数据库管理
 
 ```bash
 # 初始化数据库
-python kng-plugin/scripts/db.py init --db ./kng.db
+python kng-plugin/scripts/db.py init --db ~/.kng-plugin/kng.db
 
 # 导入现有知识
 python kng-plugin/scripts/kb_import.py \
-  --db ./kng.db \
-  --capability-dir kng-plugin/kb/capability \
-  --project-dir kb/projects/demo-game \
+  --db ~/.kng-plugin/kng.db \
+  --capability-dir ~/.kng-plugin/kb/capability \
+  --project-dir ~/.kng-plugin/kb/projects/demo-game \
   --project-id demo-game --verbose
 
 # 查看统计
-python kng-plugin/scripts/db.py stats --db ./kng.db
+python kng-plugin/scripts/db.py stats --db ~/.kng-plugin/kng.db
 ```
 
 ### Web 可视化
 
 ```bash
 # 启动 Web 查看器（默认 http://127.0.0.1:8787）
-python kng-plugin/scripts/db_viewer.py --db ./kng.db
+python kng-plugin/scripts/db_viewer.py --db ~/.kng-plugin/kng.db
 ```
 
 功能：Dashboard 总览、数据浏览（分页）、全文搜索（中文 LIKE 回退）、模块关联图谱可视化、JSON API。
@@ -143,13 +145,13 @@ python kng-plugin/scripts/db_viewer.py --db ./kng.db
 # 文件模式
 python kng-plugin/scripts/retrieve_kb.py \
   --query “并发 幂等” \
-  --capability-dir kng-plugin/kb/capability \
-  --project-dir kb/projects/demo-game
+  --capability-dir ~/.kng-plugin/kb/capability \
+  --project-dir ~/.kng-plugin/kb/projects/demo-game
 
 # DB 模式（关键词 / 全文检索）
 python kng-plugin/scripts/retrieve_kb.py \
   --query “并发 幂等” \
-  --db ./kng.db --project demo-game --mode fts
+  --db ~/.kng-plugin/kng.db --project demo-game --mode fts
 ```
 
 ### 数据库 Schema
@@ -167,19 +169,23 @@ python kng-plugin/scripts/retrieve_kb.py \
 
 ## 7. 配置文件
 
-`kng.config.json`（工作区根目录）：
+`~/.kng-plugin/kng.config.json`：
 
 ```json
 {
   “active_project”: “demo-game”,
-  “kb_root”: “./kb”,
+  “kb_root”: “~/.kng-plugin/kb”,
   “output_dir”: “./test-output”,
-  “db_path”: “./kng.db”
+  “db_path”: “~/.kng-plugin/kng.db”
 }
 ```
 
 - `active_project`：当前活跃项目，所有命令默认使用该项目
+- `kb_root`：知识库根目录（默认 `~/.kng-plugin/kb`）
+- `output_dir`：测试输出目录（相对于当前工作目录）
 - `db_path`：可选，存在且文件有效时启用 SQLite 模式，否则使用文件模式
+
+可通过 `KNG_HOME` 环境变量自定义数据目录位置（默认 `~/.kng-plugin`）。
 
 ## 8. 输出
 
@@ -194,33 +200,34 @@ python kng-plugin/scripts/retrieve_kb.py \
 ## 9. 项目结构
 
 ```text
-kng-plugin/
+~/.kng-plugin/                    # 用户数据目录 (KNG_HOME)
+  kng.config.json                 # 全局配置
+  kng.db                          # SQLite 数据库（可选）
   kb/
-    capability/               # 能力库（用户自行提供，.gitkeep 占位）
-      skill-registry.yaml     # 技能注册表（自动生成）
-      synonym-aliases.yaml    # 同义词配置
-    projects/                 # 项目库模板目录
+    capability/                   # 能力库（用户自行维护，插件更新不影响）
+      skill-registry.yaml         # 技能注册表（自动生成）
+      synonym-aliases.yaml        # 同义词配置
+    projects/
+      <project-id>/               # 项目知识库（按项目隔离）
+
+kng-plugin/                       # 插件包（npm 安装，只读）
   scripts/
-    db.py                     # SQLite 数据库管理
-    db_viewer.py              # Web 可视化查看器
-    kb_import.py              # 批量导入工具
-    retrieve_kb.py            # 知识检索引擎（文件/DB 双模式）
-    generate_registry.py      # 能力库索引自动生成
+    db.py                         # SQLite 数据库管理
+    db_viewer.py                  # Web 可视化查看器
+    kb_import.py                  # 批量导入工具
+    retrieve_kb.py                # 知识检索引擎（文件/DB 双模式）
+    generate_registry.py          # 能力库索引自动生成
   skills/
-    kng-init/                 # 项目初始化
-    kng-test/                 # 测试设计生成
-    kng-kb/                   # 知识库管理
-    kng-evolve/               # 反馈学习进化
-    kng-select/               # 项目切换
-    test-design-methodology/  # 测试设计方法论（自动加载）
+    kng-init/                     # 项目初始化
+    kng-test/                     # 测试设计生成
+    kng-kb/                       # 知识库管理
+    kng-evolve/                   # 反馈学习进化
+    kng-select/                   # 项目切换
+    test-design-methodology/      # 测试设计方法论（自动加载）
   schemas/
-    test_design.schema.json   # 测试设计 JSON Schema
-kb/
-  projects/
-    <project-id>/             # 项目知识库（按项目隔离，用户数据）
+    test_design.schema.json       # 测试设计 JSON Schema
 bin/
-  cli.js                      # 安装/卸载 CLI 入口
-kng.config.json               # 工作区配置
+  cli.js                          # 安装/卸载 CLI 入口
 ```
 
 ## 10. 知识闭环

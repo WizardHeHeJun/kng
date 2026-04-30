@@ -1,6 +1,6 @@
 {
   "name": "kng-plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "KNG — Knowledge-driven Next-Gen Test Agent for Claude Code",
   "license": "MIT",
   "author": {

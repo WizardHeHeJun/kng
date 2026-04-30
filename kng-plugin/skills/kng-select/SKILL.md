@@ -17,9 +17,11 @@ Extract from `$ARGUMENTS`:
 - `project-id` (optional): The project to switch to (e.g., `my-project`)
 - `--list` (optional): Just list available projects without switching
 
-Set defaults:
-- `KB_ROOT` = `./kb` (or from `kng.config.json` → `kb_root`)
-- `DB_PATH` = from `kng.config.json` → `db_path` (optional)
+Resolve the data directory:
+- `KNG_HOME` = `$KNG_HOME` (if env var set) || `$HOME/.kng-plugin`
+- Read `${KNG_HOME}/kng.config.json` (if exists)
+- `KB_ROOT` = config `kb_root` || `${KNG_HOME}/kb`
+- `DB_PATH` = config `db_path` (if set)
 
 ## Step 2: List Available Projects
 
@@ -30,7 +32,7 @@ Use Glob to find all subdirectories in `${KB_ROOT}/projects/` that contain at le
 Run `python "${CLAUDE_PLUGIN_ROOT}/scripts/db.py" stats --db "${DB_PATH}"` for overall counts. Additionally, query the DB for project list — the `projects` table has all registered projects with their metadata.
 
 ### Both modes:
-Read `kng.config.json` to determine the currently active project (field: `active_project`, fallback to `default_project`).
+Read `${KNG_HOME}/kng.config.json` to determine the currently active project (field: `active_project`, fallback to `default_project`).
 
 For each project found, show:
 - Project ID
@@ -57,14 +59,14 @@ If `--list` was specified, display the list and stop here.
 
 ## Step 4: Save Selection
 
-Read `kng.config.json` (or create if not exists). Set `active_project` to the selected project ID.
+Read `${KNG_HOME}/kng.config.json` (or create if not exists). Set `active_project` to the selected project ID.
 
 ```json
 {
   "active_project": "<selected-project-id>",
-  "kb_root": "./kb",
+  "kb_root": "${KNG_HOME}/kb",
   "output_dir": "./test-output",
-  "db_path": "./kng.db"
+  "db_path": "${KNG_HOME}/kng.db"
 }
 ```
 

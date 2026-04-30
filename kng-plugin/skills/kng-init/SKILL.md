@@ -15,6 +15,16 @@ Supports two modes:
 - **空项目模式**: `/kng-init my-project` — 生成空模板，模块注册表为空，后续通过 `/kng-kb import` 逐步填充
 - **文档驱动模式**: `/kng-init my-project --from-lark <url>` — 从项目总览文档自动分析项目类型、核心系统，生成项目概览和模块注册表
 
+## Step 0: Resolve KNG Home
+
+Resolve the data directory:
+- `KNG_HOME` = `$KNG_HOME` (if env var set) || `$HOME/.kng-plugin`
+- Read `${KNG_HOME}/kng.config.json` (if exists)
+- `KB_ROOT` = config `kb_root` || `${KNG_HOME}/kb`
+- `CAPABILITY_DIR` = `${KNG_HOME}/kb/capability`
+- `DB_PATH` = config `db_path` (if set)
+- `OUTPUT_DIR` = config `output_dir` || `./test-output` (relative to CWD)
+
 ## Step 1: Parse Arguments
 
 Extract from `$ARGUMENTS`:
@@ -25,14 +35,14 @@ If no `project-id` is provided, ask the user for one.
 
 ## Step 2: Check Existing State
 
-1. Check if `./kb/projects/${PROJECT_ID}/` already exists. If yes, inform the user and ask whether to overwrite or skip.
-2. Check if `kng.config.json` exists in the workspace root.
+1. Check if `${KB_ROOT}/projects/${PROJECT_ID}/` already exists. If yes, inform the user and ask whether to overwrite or skip.
+2. Check if `${KNG_HOME}/kng.config.json` exists.
 
 ## Step 3: Create Project KB Directory
 
 Create the directory structure:
 ```
-./kb/projects/${PROJECT_ID}/
+${KB_ROOT}/projects/${PROJECT_ID}/
 ```
 
 ## Step 4: Document-Driven Mode (if --from-lark provided)
@@ -65,7 +75,7 @@ Read the fetched document carefully and extract:
 
 ### 4c. Generate project-overview.md from real content
 
-Write `./kb/projects/${PROJECT_ID}/project-overview.md` with ACTUAL content extracted from the document — not placeholder templates. Example:
+Write `${KB_ROOT}/projects/${PROJECT_ID}/project-overview.md` with ACTUAL content extracted from the document — not placeholder templates. Example:
 
 ```markdown
 # my-project 项目概览
@@ -97,7 +107,7 @@ For EACH business module/system identified in step 4b, create a module entry wit
   - Related terms from the overview doc
 - `description`: One-line summary of what this module covers
 
-Write `./kb/projects/${PROJECT_ID}/project-modules.yaml`:
+Write `${KB_ROOT}/projects/${PROJECT_ID}/project-modules.yaml`:
 
 ```yaml
 # Project Module Registry & Knowledge Graph — 项目模块索引与知识图谱
@@ -150,7 +160,7 @@ fallback_module: general
 
 Generate template files with placeholder content.
 
-### `./kb/projects/${PROJECT_ID}/project-overview.md`
+### `${KB_ROOT}/projects/${PROJECT_ID}/project-overview.md`
 
 ```markdown
 # ${PROJECT_ID} 项目概览
@@ -171,7 +181,7 @@ Generate template files with placeholder content.
 <!-- 客户端引擎、服务端框架、特殊限制等 -->
 ```
 
-### `./kb/projects/${PROJECT_ID}/project-modules.yaml`
+### `${KB_ROOT}/projects/${PROJECT_ID}/project-modules.yaml`
 
 ```yaml
 # Project Module Registry & Knowledge Graph — 项目模块索引与知识图谱
@@ -193,7 +203,7 @@ fallback_module: general
 
 These files are always generated as templates, regardless of mode:
 
-### `./kb/projects/${PROJECT_ID}/bug-patterns.md`
+### `${KB_ROOT}/projects/${PROJECT_ID}/bug-patterns.md`
 
 ```markdown
 # ${PROJECT_ID} 历史问题模式
@@ -208,7 +218,7 @@ These files are always generated as templates, regardless of mode:
 <!-- 基于历史问题，重点关注哪些方面 -->
 ```
 
-### `./kb/projects/${PROJECT_ID}/test-constraints.md`
+### `${KB_ROOT}/projects/${PROJECT_ID}/test-constraints.md`
 
 ```markdown
 # ${PROJECT_ID} 测试约束与规范
@@ -228,20 +238,20 @@ These files are always generated as templates, regardless of mode:
 
 ## Step 7: Create or Update Config & Activate Project
 
-**Always** set the newly created project as the active project in `kng.config.json`.
+**Always** set the newly created project as the active project in `${KNG_HOME}/kng.config.json`.
 
-If `kng.config.json` does not exist, create it:
+If `${KNG_HOME}/kng.config.json` does not exist, create it:
 
 ```json
 {
   "active_project": "${PROJECT_ID}",
-  "kb_root": "./kb",
+  "kb_root": "${KNG_HOME}/kb",
   "output_dir": "./test-output",
-  "db_path": "./kng.db"
+  "db_path": "${KNG_HOME}/kng.db"
 }
 ```
 
-If it already exists, update the `active_project` field to `${PROJECT_ID}` using Edit tool. Preserve all other fields. If there is a legacy `default_project` field, update it as well to keep in sync. If `db_path` is not yet present, add it with value `"./kng.db"`.
+If it already exists, update the `active_project` field to `${PROJECT_ID}` using Edit tool. Preserve all other fields. If there is a legacy `default_project` field, update it as well to keep in sync. If `db_path` is not yet present, add it with value `"${KNG_HOME}/kng.db"`.
 
 This ensures that subsequent `/kng-test`, `/kng-kb`, `/kng-evolve` invocations automatically use the newly created project without requiring `--project`.
 
@@ -255,7 +265,7 @@ Run the registry generator to scan all `.md` files in the capability directory, 
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/generate_registry.py" \
-  "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+  "${KNG_HOME}/kb/capability" \
   --verbose
 ```
 
@@ -272,7 +282,7 @@ Read the generated `skill-registry.yaml` and collect all `tags` across all skill
    - English equivalent(s) if applicable
 3. Merge groups that overlap semantically
 
-Write the result to `${CLAUDE_PLUGIN_ROOT}/kb/capability/synonym-aliases.yaml` in this format:
+Write the result to `${KNG_HOME}/kb/capability/synonym-aliases.yaml` in this format:
 
 ```yaml
 # Synonym/Alias Groups for KB Retrieval
@@ -306,7 +316,7 @@ Initialize the SQLite database and import all flat KB files into it. This enable
    ```bash
    python "${CLAUDE_PLUGIN_ROOT}/scripts/kb_import.py" \
      --db "${DB_PATH}" \
-     --capability-dir "${CLAUDE_PLUGIN_ROOT}/kb/capability" \
+     --capability-dir "${KNG_HOME}/kb/capability" \
      --verbose
    ```
 
