@@ -65,17 +65,8 @@ function install() {
 
   success("Claude Code CLI detected.\n");
 
-  // Determine source: local (npx from cloned repo) or npm package
-  const localMarketplace = path.join(PACKAGE_ROOT, ".claude-plugin", "marketplace.json");
-  let source;
-
-  if (fs.existsSync(localMarketplace)) {
-    source = PACKAGE_ROOT;
-    log(`Using local plugin source: ${source}`);
-  } else {
-    source = REPO_URL;
-    log(`Using remote source: ${source}`);
-  }
+  const source = REPO_URL;
+  log(`Using remote source: ${source}`);
 
   // Step 1: Add marketplace
   log("Adding KNG marketplace...");
