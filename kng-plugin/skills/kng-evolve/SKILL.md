@@ -1,6 +1,6 @@
 ---
 name: kng-evolve
-description: "Review test design output, capture feedback, and evolve knowledge base entries. Use after /kng-test to feed learnings back into capability or project KB."
+description: "Review test design output, capture feedback, and evolve knowledge base entries. Feed learnings back into capability or project KB."
 argument-hint: "[--source <test-design.json|test-design.md>] [--type capability|project] [--project <id>]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
 ---
@@ -9,7 +9,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
 
 When invoked with: $ARGUMENTS
 
-This skill closes the learning loop: after `/kng-test` generates a test design, use `/kng-evolve` to review the output, capture what was good/bad/missing, and feed those learnings back into the knowledge base so future generations are better.
+This skill closes the learning loop: review test design output, capture what was good/bad/missing, and feed those learnings back into the knowledge base so future generations are better.
 
 ## Step 0: Resolve Project Context
 
@@ -279,7 +279,7 @@ Report:
 - Files updated and what was added
 - Which skills will benefit (via registry routing)
 - If graph was updated: show the new/modified relations
-- "这些改进会在下次 `/kng-test` 时自动生效。知识图谱的关联关系会让测试设计自动覆盖跨系统集成场景。"
+- "这些改进已写入知识库，后续测试设计时会自动生效。知识图谱的关联关系会让测试设计自动覆盖跨系统集成场景。"
 
 ---
 

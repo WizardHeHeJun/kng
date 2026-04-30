@@ -1,6 +1,6 @@
 ---
 name: kng-select
-description: "Switch the active project knowledge base. Use to change which project KB is used by /kng-test, /kng-kb, and /kng-evolve."
+description: "Switch the active project knowledge base. Use to change which project KB is used by /kng-kb and /kng-evolve."
 argument-hint: "[<project-id> | --list]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
 ---
@@ -9,7 +9,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
 
 When invoked with: $ARGUMENTS
 
-Switch or inspect the active project knowledge base. All other KNG skills (`/kng-test`, `/kng-kb`, `/kng-evolve`) use the active project by default.
+Switch or inspect the active project knowledge base. All other KNG skills (`/kng-kb`, `/kng-evolve`) use the active project by default.
 
 ## Step 1: Parse Arguments
 
@@ -85,6 +85,6 @@ Display:
 📦 已注册模块: {module_count} 个
 📄 知识库文件: {file_count} 个
 
-后续 /kng-test、/kng-kb、/kng-evolve 将默认使用此项目。
+后续 /kng-kb、/kng-evolve 将默认使用此项目。
 如需切换，使用 /kng-select <其他项目> 或 /kng-select --list 查看所有项目。
 ```

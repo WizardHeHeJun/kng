@@ -142,7 +142,6 @@ ${GREEN}========================================${RESET}
   Available commands in Claude Code:
 
     /kng-init <project-id>          Initialize project KB
-    /kng-test <feishu-url>          Generate test design
     /kng-kb list|add|import         Manage knowledge base
     /kng-evolve                     Feedback & learning
     /kng-select <project-id>        Switch project

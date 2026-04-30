@@ -9,7 +9,7 @@ allowed-tools: [Read, Write, Glob, Grep, Bash, Skill]
 
 When invoked with: $ARGUMENTS
 
-Manage the dual knowledge base (capability KB + project KB) used by `/kng-test`.
+Manage the dual knowledge base (capability KB + project KB).
 
 ## Step 0: Resolve Project Context
 

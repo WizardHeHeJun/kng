@@ -72,7 +72,6 @@ npm uninstall -g kng-plugin
 | 命令 | 功能 |
 |------|------|
 | `/kng-init <project-id>` | 初始化项目知识库（支持 `--from-lark <url>` 从飞书文档自动提取模块和关系） |
-| `/kng-test <feishu-url>` | 从飞书文档生成结构化测试设计（JSON + Markdown） |
 | `/kng-kb list\|add\|import` | 管理知识库条目（列表 / 交互添加 / 从飞书导入） |
 | `/kng-evolve` | 回顾测试产出，将反馈智能路由回知识库 |
 | `/kng-select [project-id]` | 切换活跃项目知识库 |
@@ -86,10 +85,7 @@ npm uninstall -g kng-plugin
 # 2. 导入策划案到项目知识库（保留原始内容 + 自动审查反馈）
 /kng-kb import --from-lark <策划案URL> --type project
 
-# 3. 从策划案生成测试设计
-/kng-test <策划案URL>
-
-# 4. 执行测试后，反馈学习，演进知识库
+# 3. 执行测试后，反馈学习，演进知识库
 /kng-evolve
 ```
 
@@ -219,7 +215,6 @@ kng-plugin/                       # 插件包（npm 安装，只读）
     generate_registry.py          # 能力库索引自动生成
   skills/
     kng-init/                     # 项目初始化
-    kng-test/                     # 测试设计生成
     kng-kb/                       # 知识库管理
     kng-evolve/                   # 反馈学习进化
     kng-select/                   # 项目切换
@@ -233,13 +228,13 @@ bin/
 ## 10. 知识闭环
 
 ```
-策划文档 → /kng-test → 测试设计 → 实际执行 → /kng-evolve → 知识库更新 → 下次更准确
+能力库 + 项目库 → 测试设计 → 实际执行 → /kng-evolve → 知识库更新 → 下次更准确
 ```
 
-1. `/kng-test` 生成初始测试设计
+1. 基于知识库生成测试设计
 2. 按设计执行测试，发现遗漏或新问题
 3. `/kng-evolve` 回顾产出，反馈智能路由到对应知识文件
-4. 知识库自动更新，下次 `/kng-test` 时自动受益
+4. 知识库自动更新，下次测试设计时自动受益
 
 ## License
 

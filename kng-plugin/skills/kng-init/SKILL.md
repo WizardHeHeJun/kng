@@ -9,7 +9,7 @@ allowed-tools: [Read, Write, Glob, Bash, Skill]
 
 When invoked with: $ARGUMENTS
 
-Initialize a new project knowledge base so that `/kng-test` can generate project-aware test designs.
+Initialize a new project knowledge base for KNG.
 
 Supports two modes:
 - **空项目模式**: `/kng-init my-project` — 生成空模板，模块注册表为空，后续通过 `/kng-kb import` 逐步填充
@@ -253,7 +253,7 @@ If `${KNG_HOME}/kng.config.json` does not exist, create it:
 
 If it already exists, update the `active_project` field to `${PROJECT_ID}` using Edit tool. Preserve all other fields. If there is a legacy `default_project` field, update it as well to keep in sync. If `db_path` is not yet present, add it with value `"${KNG_HOME}/kng.db"`.
 
-This ensures that subsequent `/kng-test`, `/kng-kb`, `/kng-evolve` invocations automatically use the newly created project without requiring `--project`.
+This ensures that subsequent `/kng-kb`, `/kng-evolve` invocations automatically use the newly created project without requiring `--project`.
 
 ## Step 7a: Auto-generate Capability Index
 

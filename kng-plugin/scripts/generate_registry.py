@@ -212,7 +212,7 @@ def generate_yaml(skills: List[Dict], existing_scenarios: str) -> str:
     lines = [
         "# Skill Registry — 能力库可调用技能索引",
         "# 由 generate_registry.py 从 capability/*.md 自动生成",
-        "# retrieve_kb.py 和 /kng-test 会读取此文件进行技能路由和选择",
+        "# retrieve_kb.py 会读取此文件进行技能路由和选择",
         "",
         "skills:",
     ]
