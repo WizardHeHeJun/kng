@@ -20,18 +20,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _CSS = """
 :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #242836;
-    --border: #2e3347;
-    --text: #e1e4ed;
-    --text2: #8b8fa3;
-    --accent: #6c8cff;
-    --accent2: #4a6adf;
-    --green: #4ade80;
-    --orange: #fb923c;
-    --red: #f87171;
-    --yellow: #facc15;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface2: #f9fafb;
+    --border: #e5e7eb;
+    --text: #1f2937;
+    --text2: #6b7280;
+    --accent: #db2777;
+    --accent2: #be185d;
+    --green: #059669;
+    --orange: #ea580c;
+    --red: #dc2626;
+    --yellow: #ca8a04;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -43,11 +43,11 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .topbar {
-    background: var(--surface); border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #fce7f3, #fdf2f8); border-bottom: 1px solid #f9a8d4;
     padding: 12px 24px; display: flex; align-items: center; gap: 24px;
     position: sticky; top: 0; z-index: 100;
 }
-.topbar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; }
+.topbar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; color: var(--accent); }
 .topbar nav { display: flex; gap: 16px; flex-wrap: wrap; }
 .topbar nav a {
     color: var(--text2); padding: 4px 12px; border-radius: 6px;
@@ -106,7 +106,7 @@ td {
     font-size: 14px; vertical-align: top;
 }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(108, 140, 255, .04); }
+tr:hover td { background: rgba(219, 39, 119, .04); }
 
 .tag {
     display: inline-block; background: var(--surface2);
@@ -118,11 +118,11 @@ tr:hover td { background: rgba(108, 140, 255, .04); }
     display: inline-block; padding: 2px 10px; border-radius: 12px;
     font-size: 12px; font-weight: 600;
 }
-.badge-cap { background: rgba(74, 222, 128, .15); color: var(--green); }
-.badge-proj { background: rgba(108, 140, 255, .15); color: var(--accent); }
-.badge-high { background: rgba(248, 113, 113, .15); color: var(--red); }
-.badge-medium { background: rgba(251, 146, 60, .15); color: var(--orange); }
-.badge-low { background: rgba(74, 222, 128, .15); color: var(--green); }
+.badge-cap { background: #d1fae5; color: var(--green); }
+.badge-proj { background: #fce7f3; color: var(--accent); }
+.badge-high { background: #fee2e2; color: var(--red); }
+.badge-medium { background: #ffedd5; color: var(--orange); }
+.badge-low { background: #d1fae5; color: var(--green); }
 
 .content-box {
     background: var(--surface); border: 1px solid var(--border);
@@ -192,7 +192,7 @@ tr:hover td { background: rgba(108, 140, 255, .04); }
     border-radius: 12px; padding: 24px; cursor: pointer;
     transition: border-color 0.2s, background 0.2s, transform 0.15s;
 }
-.project-card:hover { border-color: var(--accent); background: rgba(99,102,241,0.08); transform: translateY(-2px); }
+.project-card:hover { border-color: var(--accent); background: #fdf2f8; transform: translateY(-2px); }
 .project-card .proj-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
 .project-card .proj-id { font-size: 13px; color: var(--text2); }
 .project-card .proj-desc { font-size: 13px; color: var(--text2); margin-top: 8px; }
@@ -204,8 +204,8 @@ tr:hover td { background: rgba(108, 140, 255, .04); }
     cursor: pointer; transition: border-color 0.2s, background 0.2s;
     user-select: none;
 }
-.graph-node:hover { border-color: var(--accent); background: rgba(99,102,241,0.15); }
-.graph-node.active { border-color: var(--accent); background: rgba(99,102,241,0.25); box-shadow: 0 0 0 2px var(--accent); }
+.graph-node:hover { border-color: var(--accent); background: #fce7f3; }
+.graph-node.active { border-color: var(--accent); background: #fbcfe8; box-shadow: 0 0 0 2px var(--accent); }
 .rel-row-hidden { display: none; }
 .graph-edge {
     padding: 4px 0; font-size: 13px; color: var(--text2);
@@ -472,13 +472,17 @@ def _render_table_rows(cur, rows, table: str, hidden_cols: set,
     mod_map = module_names or {}
 
     header = "".join(f"<th>{_e(_COLUMN_LABELS.get(c, c))}</th>" for c in cols)
+    id_col_idx = next((i for i, c in enumerate(all_cols) if c == "id"), None)
     tbody = []
     for row in rows:
+        row_id = row[id_col_idx] if id_col_idx is not None else None
         cells = []
         for i, col in zip(col_indices, cols):
             val = row[i]
             if col == "id" and table == "kb_entries":
                 cells.append(f'<td><a href="/entry/{val}">{_e(val)}</a></td>')
+            elif col == "title" and table == "kb_entries" and row_id is not None:
+                cells.append(f'<td><a href="/entry/{row_id}">{_e(val)}</a></td>')
             elif col in ("content", "design_json", "snippet"):
                 cells.append(f"<td>{_e(_truncate(str(val), 60))}</td>")
             elif col == "entry_type" and val:
@@ -675,25 +679,31 @@ def page_entry(db: sqlite3.Connection, entry_id: int) -> str:
     return _layout(f"条目 #{entry_id}", body, "/table/kb_entries")
 
 
-def page_search(db: sqlite3.Connection, query: str) -> str:
+def page_search(db: sqlite3.Connection, query: str, project: str = "") -> str:
+    project_name = _get_project_name(db, project)
+
     if not query.strip():
         body = '<h2>搜索</h2><div class="empty">输入关键词搜索知识库条目</div>'
-        return _layout("搜索", body)
+        return _layout("搜索", body, project=project, project_name=project_name)
 
     tokens = query.strip().split()
     fts_query = " OR ".join(tokens)
     rows = []
+
+    proj_filter = " AND (kb.project_id=? OR kb.kb_type='capability')" if project else ""
+    proj_params = [project] if project else []
+
     try:
         rows = db.execute(
-            """SELECT kb.id, kb.title, kb.kb_type, kb.entry_type,
+            f"""SELECT kb.id, kb.title, kb.kb_type, kb.entry_type,
                       kb.project_id, kb.module_id, kb.source_file,
                       substr(kb.content, 1, 300) as snippet, fts.rank
                FROM kb_entries_fts fts
                JOIN kb_entries kb ON kb.id = fts.rowid
-               WHERE kb_entries_fts MATCH ?
+               WHERE kb_entries_fts MATCH ?{proj_filter}
                ORDER BY fts.rank
                LIMIT 50""",
-            (fts_query,),
+            [fts_query] + proj_params,
         ).fetchall()
     except sqlite3.OperationalError:
         pass
@@ -703,15 +713,16 @@ def page_search(db: sqlite3.Connection, query: str) -> str:
         like_params = []
         for t in tokens:
             like_params.extend([f"%{t}%", f"%{t}%"])
+        proj_filter2 = " AND (project_id=? OR kb_type='capability')" if project else ""
         rows = db.execute(
             f"""SELECT id, title, kb_type, entry_type,
                        project_id, module_id, source_file,
                        substr(content, 1, 300) as snippet,
                        0 as rank
                 FROM kb_entries
-                WHERE {like_clauses}
+                WHERE ({like_clauses}){proj_filter2}
                 LIMIT 50""",
-            like_params,
+            like_params + proj_params,
         ).fetchall()
 
     if not rows:
@@ -719,16 +730,17 @@ def page_search(db: sqlite3.Connection, query: str) -> str:
         <h2>搜索："{_e(query)}"</h2>
         <div class="empty">未找到相关结果</div>
         """
-        return _layout("搜索", body)
+        return _layout("搜索", body, project=project, project_name=project_name)
 
     results = []
     for row in rows:
         d = dict(row)
         score = round(-d["rank"], 2)
+        entry_type_label = _ENTRY_TYPE_LABELS.get(d["entry_type"], d["entry_type"])
         results.append(f"""<tr>
             <td><a href="/entry/{d['id']}">{_e(d['title'])}</a></td>
             <td>{_kb_type_badge(d['kb_type'])}</td>
-            <td>{_e(d['entry_type'])}</td>
+            <td>{_e(entry_type_label)}</td>
             <td>{_e(d.get('module_id') or '—')}</td>
             <td>{score}</td>
             <td>{_e(_truncate(d['snippet'], 150))}</td>
@@ -746,7 +758,7 @@ def page_search(db: sqlite3.Connection, query: str) -> str:
         </table>
     </div>
     """
-    return _layout(f"搜索：{query}", body)
+    return _layout(f"搜索：{query}", body, project=project, project_name=project_name)
 
 
 def page_modules(db: sqlite3.Connection) -> str:
@@ -932,7 +944,8 @@ class KngViewerHandler(BaseHTTPRequestHandler):
                 self._respond(200, page_entry(db, eid))
             elif path == "/search":
                 q = params.get("q", "")
-                self._respond(200, page_search(db, q))
+                proj = params.get("project", "")
+                self._respond(200, page_search(db, q, project=proj))
             elif path == "/modules":
                 self._respond(200, page_modules(db))
             elif path == "/api/stats":
