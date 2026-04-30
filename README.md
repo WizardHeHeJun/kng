@@ -1,28 +1,26 @@
 # KNG — Knowledge-driven Next-Gen Test Agent
 
-基于双知识库（能力库 + 项目库）的智能测试设计系统。输入飞书策划案文档，自动匹配知识库上下文，生成结构化测试设计。
+基于双知识库（能力库 + 项目库）的智能测试设计系统，以 Claude Code 插件形式运行。输入飞书策划案文档，自动匹配知识库上下文，生成结构化测试设计。
 
-支持两种存储模式：
-- **文件模式**：YAML + Markdown 扁平文件，适合小型项目
-- **SQLite 模式**：结构化数据库 + FTS5 全文检索，适合大型项目（百级策划案、多模块关联）
+核心特性：
+- **双知识库体系**：通用能力库（测试方法论）+ 项目知识库（业务模块、bug 模式、测试约束）
+- **可调用技能**：预定义的测试技能工具箱（功能路径、边界值、异常容错、状态流转、权限安全、接口自动化）
+- **知识闭环**：生成 → 执行 → 反馈 → 演进，持续学习改进
+- **领域无关框架**：同一引擎可适配 QA、前端、后端等多个领域
+- **双存储模式**：文件模式（YAML + Markdown）或 SQLite 模式（结构化 + FTS5 全文检索）
 
 ## 1. 前置条件
 
-- Python 3.10+（SQLite 为 stdlib，无需额外安装）
-- `lark-cli`（飞书文档抓取）
-- 飞书授权（建议 user 身份）：
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- Node.js 18+
+- Python 3.10+（SQLite 模式需要）
+- `lark-cli`（飞书文档抓取）+ 飞书授权：
   ```bash
   lark-cli config init --new
   lark-cli auth login --scope “drive:drive:readonly docs:document:readonly wiki:wiki:readonly”
   ```
 
-## 2. 安装依赖
-
-```bash
-pip install -r requirements.txt
-```
-
-## 3. Claude Code 插件安装
+## 2. 安装
 
 ### 一键安装（推荐）
 
@@ -42,61 +40,57 @@ npx github:WizardHeHeJun/kng install
 /plugin install kng@kng-marketplace
 ```
 
+安装后执行 `/reload-plugins` 激活。
+
 ### 卸载
 
 ```bash
 npx github:WizardHeHeJun/kng uninstall
 ```
 
-安装后通过 slash command 驱动：
+## 3. 命令一览
 
 | 命令 | 功能 |
 |------|------|
-| `/kng-init <project-id>` | 初始化项目知识库 + 数据库 |
-| `/kng-test <feishu-url>` | 从飞书文档生成测试设计 |
-| `/kng-kb list\|add\|import` | 管理知识库条目 |
-| `/kng-evolve` | 反馈学习，进化知识库 |
-| `/kng-select <project-id>` | 切换当前活跃项目 |
+| `/kng-init <project-id>` | 初始化项目知识库（支持 `--from-lark <url>` 从飞书文档自动提取模块和关系） |
+| `/kng-test <feishu-url>` | 从飞书文档生成结构化测试设计（JSON + Markdown） |
+| `/kng-kb list\|add\|import` | 管理知识库条目（列表 / 交互添加 / 从飞书导入） |
+| `/kng-evolve` | 回顾测试产出，将反馈智能路由回知识库 |
+| `/kng-select [project-id]` | 切换活跃项目知识库 |
 
-### 快速开始
+## 4. 快速开始
 
 ```bash
-# 1. 初始化项目（自动创建 DB）
+# 1. 初始化项目（从飞书总览文档自动提取模块图谱）
 /kng-init my-game --from-lark <总览文档URL>
 
-# 2. 导入策划案
+# 2. 导入策划案到项目知识库（保留原始内容 + 自动审查反馈）
 /kng-kb import --from-lark <策划案URL> --type project
 
-# 3. 生成测试设计
+# 3. 从策划案生成测试设计
 /kng-test <策划案URL>
 
-# 4. 反馈学习
+# 4. 执行测试后，反馈学习，演进知识库
 /kng-evolve
 ```
 
-## 4. 独立脚本使用
+## 5. 双知识库架构
 
-### 4.1 单文档版本
+| 知识库 | 位置 | 用途 | 更新方式 |
+|--------|------|------|----------|
+| **能力库** | `kng-plugin/kb/capability/` | 通用测试方法论、技能工具箱 | 用户自行维护 / `/kng-kb add` |
+| **项目库** | `kb/projects/<project-id>/` | 项目业务模块、架构设计、历史问题 | `/kng-kb add` / `/kng-kb import` / `/kng-evolve` |
 
-```bash
-python tools/lark_test_agent.py --url “https://your-domain.feishu.cn/docx/xxxxxxxx”
-```
+能力库内容由用户自行提供，插件仓库仅保留目录占位。项目库按项目隔离，初始化后包含：
 
-### 4.2 双知识库版本
+- `project-overview.md` — 项目类型、核心系统、高风险区域
+- `project-modules.yaml` — 模块注册表与知识图谱（模块 + 关系）
+- `bug-patterns.md` — 历史问题模式
+- `test-constraints.md` — 测试约束与规范
 
-```bash
-python tools/dual_kb_test_agent.py --project-id demo-game --url “https://your-domain.feishu.cn/docx/xxxxxxxx”
-```
+## 6. SQLite 存储层（可选）
 
-### 4.3 一键验证
-
-```bash
-validate_run.bat demo-game “https://your-domain.feishu.cn/docx/xxxxxxxx”
-```
-
-## 5. SQLite 存储层
-
-大型项目推荐启用 SQLite 模式，支持结构化查询、全文检索和模块关联图谱。
+在 `kng.config.json` 中配置 `db_path` 即可启用，支持结构化查询、全文检索和模块关联图谱。
 
 ### 数据库管理
 
@@ -120,20 +114,13 @@ python kng-plugin/scripts/db.py stats --db ./kng.db
 ```bash
 # 启动 Web 查看器（默认 http://127.0.0.1:8787）
 python kng-plugin/scripts/db_viewer.py --db ./kng.db
-
-# 或通过 db.py 子命令
-python kng-plugin/scripts/db.py view --db ./kng.db --port 9000
 ```
 
-功能：
-- Dashboard 总览（各表行数统计）
-- 所有表数据浏览（分页）
-- KB 条目详情查看（全文内容）
-- 全文搜索（支持中文 LIKE 回退）
-- 模块关联图谱可视化
-- JSON API（`/api/stats`）
+功能：Dashboard 总览、数据浏览（分页）、全文搜索（中文 LIKE 回退）、模块关联图谱可视化、JSON API。
 
-### 知识检索（双模式）
+配置了 `db_path` 后，插件在每次对话启动时会自动检测并后台启动查看器。
+
+### 知识检索
 
 ```bash
 # 文件模式
@@ -142,18 +129,13 @@ python kng-plugin/scripts/retrieve_kb.py \
   --capability-dir kng-plugin/kb/capability \
   --project-dir kb/projects/demo-game
 
-# DB 模式（关键词匹配）
-python kng-plugin/scripts/retrieve_kb.py \
-  --query “并发 幂等” \
-  --db ./kng.db --project demo-game --mode keyword
-
-# DB 模式（全文检索）
+# DB 模式（关键词 / 全文检索）
 python kng-plugin/scripts/retrieve_kb.py \
   --query “并发 幂等” \
   --db ./kng.db --project demo-game --mode fts
 ```
 
-### 数据库 Schema（10 张表）
+### 数据库 Schema
 
 | 表 | 用途 |
 |----|------|
@@ -166,7 +148,7 @@ python kng-plugin/scripts/retrieve_kb.py \
 | `test_designs` | 测试设计产出追踪 |
 | `learning_feedback` | 学习反馈记录 |
 
-## 6. 配置文件
+## 7. 配置文件
 
 `kng.config.json`（工作区根目录）：
 
@@ -179,42 +161,62 @@ python kng-plugin/scripts/retrieve_kb.py \
 }
 ```
 
-- `db_path` 为可选字段，存在且文件有效时启用 SQLite 模式，否则使用文件模式
+- `active_project`：当前活跃项目，所有命令默认使用该项目
+- `db_path`：可选，存在且文件有效时启用 SQLite 模式，否则使用文件模式
 
-## 7. 输出
+## 8. 输出
 
 默认输出到 `test-output/`：
 
-- `*-source.md`：抓取到的原始文档内容
-- `*-test-design.json`：结构化测试产出
-- `*-test-design.md`：可读版测试设计
+| 文件 | 内容 |
+|------|------|
+| `*-source.md` | 抓取到的原始文档 |
+| `*-test-design.json` | 结构化测试产出（测试点、用例、风险、待确认事项） |
+| `*-test-design.md` | 可读版测试设计报告 |
 
-## 8. 项目目录
+## 9. 项目结构
 
 ```text
 kng-plugin/
-  kb/capability/                # 通用测试能力库（跨项目复用）
-    skill-registry.yaml         # 技能注册表
-    synonym-aliases.yaml        # 同义词配置
-    test-design-guidelines.md   # 测试设计规范
-    api-test-script-playbook.md # 接口脚本手册
+  kb/
+    capability/               # 能力库（用户自行提供，.gitkeep 占位）
+      skill-registry.yaml     # 技能注册表（自动生成）
+      synonym-aliases.yaml    # 同义词配置
+    projects/                 # 项目库模板目录
   scripts/
-    retrieve_kb.py              # 知识检索引擎（文件/DB 双模式）
-    db.py                       # SQLite 数据库抽象层
-    kb_import.py                # 批量导入工具
+    db.py                     # SQLite 数据库管理
+    db_viewer.py              # Web 可视化查看器
+    kb_import.py              # 批量导入工具
+    retrieve_kb.py            # 知识检索引擎（文件/DB 双模式）
+    generate_registry.py      # 能力库索引自动生成
   skills/
-    kng-test/                   # 测试设计生成
-    kng-kb/                     # 知识库管理
-    kng-evolve/                 # 反馈学习进化
-    kng-init/                   # 项目初始化
-    kng-select/                 # 项目切换
+    kng-init/                 # 项目初始化
+    kng-test/                 # 测试设计生成
+    kng-kb/                   # 知识库管理
+    kng-evolve/               # 反馈学习进化
+    kng-select/               # 项目切换
+    test-design-methodology/  # 测试设计方法论（自动加载）
+  schemas/
+    test_design.schema.json   # 测试设计 JSON Schema
 kb/
   projects/
-    demo-game/                  # 项目知识库（按项目隔离）
-schemas/
-  test_design.schema.json       # 测试设计 JSON Schema
-tools/
-  lark_test_agent.py            # 单文档版本
-  dual_kb_test_agent.py         # 双知识库版本
-validate_run.bat                # 一键验证入口
+    <project-id>/             # 项目知识库（按项目隔离，用户数据）
+bin/
+  cli.js                      # 安装/卸载 CLI 入口
+kng.config.json               # 工作区配置
 ```
+
+## 10. 知识闭环
+
+```
+策划文档 → /kng-test → 测试设计 → 实际执行 → /kng-evolve → 知识库更新 → 下次更准确
+```
+
+1. `/kng-test` 生成初始测试设计
+2. 按设计执行测试，发现遗漏或新问题
+3. `/kng-evolve` 回顾产出，反馈智能路由到对应知识文件
+4. 知识库自动更新，下次 `/kng-test` 时自动受益
+
+## License
+
+MIT
