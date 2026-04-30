@@ -318,3 +318,13 @@ Print a summary:
 - Next steps:
   - Document-driven: "模块和关联图谱已从文档自动提取。使用 `/kng-kb import` 导入更多策划案时，系统会自动匹配模块、发现新模块和新的系统关联。"
   - Empty mode: "使用 `/kng-init ${PROJECT_ID} --from-lark <总览文档URL>` 从策划案自动发现模块和系统关联图谱，或使用 `/kng-kb import` 逐步积累。"
+
+## Step 9: 启动知识库查看器
+
+初始化完成后，后台启动 Web 查看器，方便用户浏览数据库内容：
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/db_viewer.py" --db "${DB_PATH}" --port 8787 &
+```
+
+向用户通知：「知识库查看器已启动：http://127.0.0.1:8787」

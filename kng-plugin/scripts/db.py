@@ -807,11 +807,20 @@ def main() -> int:
     p_stats = sub.add_parser("stats", help="Show database statistics")
     p_stats.add_argument("--db", required=True, help="Database file path")
 
+    p_view = sub.add_parser("view", help="Launch web viewer")
+    p_view.add_argument("--db", required=True, help="Database file path")
+    p_view.add_argument("--port", type=int, default=8787, help="Port (default: 8787)")
+    p_view.add_argument("--host", default="127.0.0.1", help="Host (default: 127.0.0.1)")
+
     args = parser.parse_args()
     if args.command == "init":
         cmd_init(args)
     elif args.command == "stats":
         cmd_stats(args)
+    elif args.command == "view":
+        from db_viewer import main as viewer_main
+        sys.argv = ["db_viewer", "--db", args.db, "--port", str(args.port), "--host", args.host]
+        return viewer_main()
     else:
         parser.print_help()
         return 1

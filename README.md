@@ -115,6 +115,24 @@ python kng-plugin/scripts/kb_import.py \
 python kng-plugin/scripts/db.py stats --db ./kng.db
 ```
 
+### Web 可视化
+
+```bash
+# 启动 Web 查看器（默认 http://127.0.0.1:8787）
+python kng-plugin/scripts/db_viewer.py --db ./kng.db
+
+# 或通过 db.py 子命令
+python kng-plugin/scripts/db.py view --db ./kng.db --port 9000
+```
+
+功能：
+- Dashboard 总览（各表行数统计）
+- 所有表数据浏览（分页）
+- KB 条目详情查看（全文内容）
+- 全文搜索（支持中文 LIKE 回退）
+- 模块关联图谱可视化
+- JSON API（`/api/stats`）
+
 ### 知识检索（双模式）
 
 ```bash
