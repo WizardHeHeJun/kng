@@ -6,7 +6,7 @@ const path = require("path");
 const fs = require("fs");
 
 const PLUGIN_NAME = "kng";
-const REPO_URL = "https://github.com/your-org/kng.git";
+const REPO_URL = "https://github.com/WizardHeHeJun/kng.git";
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const MARKETPLACE_ID = "kng-marketplace";
 
@@ -155,9 +155,9 @@ function showHelp() {
 ${CYAN}KNG — Knowledge-driven Next-Gen Test Agent${RESET}
 
 Usage:
-  npx kng-plugin install      Install the plugin into Claude Code
-  npx kng-plugin uninstall    Remove the plugin from Claude Code
-  npx kng-plugin help         Show this help message
+  npx github:WizardHeHeJun/kng install      Install the plugin into Claude Code
+  npx github:WizardHeHeJun/kng uninstall    Remove the plugin from Claude Code
+  npx github:WizardHeHeJun/kng help         Show this help message
 `);
 }
 

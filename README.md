@@ -27,16 +27,16 @@ pip install -r requirements.txt
 ### 一键安装（推荐）
 
 ```bash
-npx kng-plugin install
+npx github:WizardHeHeJun/kng install
 ```
 
 ### 手动安装
 
-在 Claude Code 中执行（替换 `your-org/kng` 为你的 GitHub 用户名/仓库名）：
+在 Claude Code 中执行：
 
 ```bash
 # 第一步：添加 marketplace
-/plugin marketplace add your-org/kng
+/plugin marketplace add WizardHeHeJun/kng
 
 # 第二步：安装插件
 /plugin install kng@kng-marketplace
@@ -45,7 +45,7 @@ npx kng-plugin install
 ### 卸载
 
 ```bash
-npx kng-plugin uninstall
+npx github:WizardHeHeJun/kng uninstall
 ```
 
 安装后通过 slash command 驱动：
