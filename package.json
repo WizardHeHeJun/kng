@@ -23,10 +23,9 @@
   "keywords": [
     "claude-code",
     "plugin",
-    "testing",
-    "game-qa",
     "knowledge-base",
-    "test-design"
+    "domain-agnostic",
+    "capability-driven"
   ],
   "repository": {
     "type": "git",

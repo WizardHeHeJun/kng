@@ -1,4 +1,4 @@
-# KNG — Knowledge-driven Next-Gen Test Agent
+# KNG — Knowledge-driven Next-Gen Agent Framework
 
 基于双知识库（能力库 + 项目库）的知识驱动型 Agent 框架，以 Claude Code 插件形式运行。通过结构化的知识管理和闭环学习机制，让 AI 在特定领域持续积累经验、越用越准。
 
@@ -58,12 +58,12 @@ npx kng-plugin uninstall
 
 ```bash
 # 1. 初始化项目（从飞书总览文档自动提取模块图谱）
-/kng-init my-game --from-lark <总览文档URL>
+/kng-init my-project --from-lark <总览文档URL>
 
-# 2. 导入策划案到项目知识库（保留原始内容 + 自动审查反馈）
-/kng-kb import --from-lark <策划案URL> --type project
+# 2. 导入项目文档到知识库（保留原始内容 + 自动审查反馈）
+/kng-kb import --from-lark <文档URL> --type project
 
-# 3. 执行测试后，反馈学习，演进知识库
+# 3. 完成工作后，反馈学习，演进知识库
 /kng-evolve
 ```
 
@@ -95,8 +95,8 @@ python kng-plugin/scripts/db.py init --db ~/.kng-plugin/kng.db
 python kng-plugin/scripts/kb_import.py \
   --db ~/.kng-plugin/kng.db \
   --capability-dir ~/.kng-plugin/kb/capability \
-  --project-dir ~/.kng-plugin/kb/projects/demo-game \
-  --project-id demo-game --verbose
+  --project-dir ~/.kng-plugin/kb/projects/my-project \
+  --project-id my-project --verbose
 
 # 查看统计
 python kng-plugin/scripts/db.py stats --db ~/.kng-plugin/kng.db
@@ -120,12 +120,12 @@ python kng-plugin/scripts/db_viewer.py --db ~/.kng-plugin/kng.db
 python kng-plugin/scripts/retrieve_kb.py \
   --query “并发 幂等” \
   --capability-dir ~/.kng-plugin/kb/capability \
-  --project-dir ~/.kng-plugin/kb/projects/demo-game
+  --project-dir ~/.kng-plugin/kb/projects/my-project
 
 # DB 模式（关键词 / 全文检索）
 python kng-plugin/scripts/retrieve_kb.py \
   --query “并发 幂等” \
-  --db ~/.kng-plugin/kng.db --project demo-game --mode fts
+  --db ~/.kng-plugin/kng.db --project my-project --mode fts
 ```
 
 ### 数据库 Schema
@@ -147,7 +147,7 @@ python kng-plugin/scripts/retrieve_kb.py \
 
 ```json
 {
-  “active_project”: “demo-game”,
+  “active_project”: “my-project”,
   “kb_root”: “~/.kng-plugin/kb”,
   “output_dir”: “./test-output”,
   “db_path”: “~/.kng-plugin/kng.db”
