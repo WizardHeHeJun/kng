@@ -333,3 +333,4 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 - Capability KB files are stored in `${KNG_HOME}/kb/capability/` and persist across plugin updates.
 - Always use UTF-8 encoding when writing files.
 - KB files should follow Markdown format with clear headings for maximum retrieval effectiveness.
+- **禁止在项目目录或当前工作目录创建中间文件。** 导入过程中需要的临时脚本、JSON 缓存、日志等中间产物必须写入 `${KNG_HOME}/cache/` 目录（不存在则先创建）。流程结束后应清理不再需要的缓存文件。最终输出仅写入 `${KB_ROOT}/` 下的 KB 文件。

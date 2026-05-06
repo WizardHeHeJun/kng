@@ -264,3 +264,4 @@ Establish metadata cross-links between an existing KB document entry and local c
 - The `source_type` metadata (`code` | `local_doc`) allows retrieval scripts to filter by content type.
 - Always use UTF-8 encoding when writing files.
 - If importing a large number of files (>20), display progress and ask user to confirm before proceeding.
+- **禁止在项目目录或当前工作目录创建中间文件。** 需要临时脚本或缓存数据时，必须写入 `${KNG_HOME}/cache/` 目录（不存在则先创建）。流程结束后应清理不再需要的缓存文件。
