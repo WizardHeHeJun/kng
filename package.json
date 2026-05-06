@@ -1,6 +1,6 @@
 {
   "name": "kng-plugin",
-  "version": "1.2.0",
+  "version": "1.3.2",
   "description": "KNG — Knowledge-driven Next-Gen Agent Framework for Claude Code",
   "license": "MIT",
   "author": {
@@ -13,15 +13,12 @@
     "bin/",
     ".claude-plugin/",
     "kng-plugin/.claude-plugin/",
-    "kng-plugin/CLAUDE.md",
     "kng-plugin/package.json",
     "kng-plugin/kb/capability/.gitkeep",
-    "kng-plugin/kb/capability/CLAUDE.md",
     "kng-plugin/schemas/",
-    "kng-plugin/scripts/CLAUDE.md",
     "kng-plugin/scripts/*.py",
     "kng-plugin/scripts/Elysia.png",
-    "kng-plugin/skills/"
+    "kng-plugin/skills/**/SKILL.md"
   ],
   "keywords": [
     "claude-code",

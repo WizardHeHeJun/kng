@@ -22,37 +22,17 @@
 
 ## 2. 安装
 
-### npm 全局安装（推荐）
-
-```bash
-npm install -g kng-plugin
-kng-plugin install
-```
-
-### 一次性安装（无需全局）
+只需一个命令即可安装：
 
 ```bash
 npx kng-plugin install
 ```
 
-### 从 GitHub 安装
+或者在 Claude Code 里的插件市场安装：
 
-```bash
-npx kng-plugin install --from-github
-# 或直接
-npx github:WizardHeHeJun/kng install
 ```
-
-### 手动安装
-
-在 Claude Code 中执行：
-
-```bash
-# 第一步：添加 marketplace
 /plugin marketplace add WizardHeHeJun/kng
-
-# 第二步：安装插件
-/plugin install kng@kng-marketplace
+/plugin install kng
 ```
 
 安装后执行 `/reload-plugins` 激活。
@@ -62,9 +42,7 @@ npx github:WizardHeHeJun/kng install
 ### 卸载
 
 ```bash
-kng-plugin uninstall
-# 如果全局安装了，还需移除全局包：
-npm uninstall -g kng-plugin
+npx kng-plugin uninstall
 ```
 
 ## 3. 命令一览
