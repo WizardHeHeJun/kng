@@ -80,6 +80,23 @@ function runClaude(args) {
   }
 }
 
+function getClaudePluginDir() {
+  return path.join(os.homedir(), ".claude", "plugins");
+}
+
+function cleanMarketplaceCache() {
+  const pluginDir = getClaudePluginDir();
+  const dirs = [
+    path.join(pluginDir, "cache", MARKETPLACE_ID),
+    path.join(pluginDir, "marketplaces", MARKETPLACE_ID),
+  ];
+  for (const dir of dirs) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
 function install() {
   log("Installing KNG plugin for Claude Code...\n");
 
@@ -97,32 +114,35 @@ function install() {
   const source = REPO_URL;
   log(`Using source: ${source}`);
 
-  // Step 1: Add marketplace
+  // Step 1: Clean old installation to ensure latest version
+  const checkResult = runClaude(`plugin marketplace list`);
+  const alreadyInstalled = checkResult.ok && checkResult.output.includes(MARKETPLACE_ID);
+
+  if (alreadyInstalled) {
+    log("Refreshing existing installation...");
+    runClaude(`plugin uninstall ${PLUGIN_NAME} 2>/dev/null`);
+    runClaude(`plugin marketplace remove ${MARKETPLACE_ID}`);
+    cleanMarketplaceCache();
+    success("Old version cleaned.");
+  }
+
+  // Step 2: Add marketplace (fresh clone from GitHub)
   log("Adding KNG marketplace...");
   const addResult = runClaude(`plugin marketplace add "${source}"`);
   if (addResult.ok) {
     success("Marketplace added.");
   } else {
-    if (addResult.output.includes("already")) {
-      warn("Marketplace already registered, updating...");
-      runClaude(`plugin marketplace update ${MARKETPLACE_ID}`);
-    } else {
-      warn(`Marketplace add returned: ${addResult.output}`);
-      log("Trying to continue with installation...");
-    }
+    warn(`Marketplace add returned: ${addResult.output}`);
+    log("Trying to continue with installation...");
   }
 
-  // Step 2: Install plugin
+  // Step 3: Install plugin
   log("Installing kng plugin...");
   const installResult = runClaude(`plugin install ${PLUGIN_NAME}@${MARKETPLACE_ID}`);
   if (installResult.ok) {
     success("Plugin installed successfully!");
   } else {
-    if (installResult.output.includes("already installed")) {
-      warn("Plugin already installed.");
-    } else {
-      warn(`Plugin install returned: ${installResult.output}`);
-    }
+    warn(`Plugin install returned: ${installResult.output}`);
   }
 
   // Step 3: Scaffold data directory
