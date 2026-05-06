@@ -81,9 +81,9 @@ npx kng-plugin uninstall
 - `bug-patterns.md` — 历史问题模式
 - `test-constraints.md` — 测试约束与规范
 
-## 6. SQLite 存储层（可选）
+## 6. SQLite 存储层
 
-在 `~/.kng-plugin/kng.config.json` 中配置 `db_path` 即可启用，支持结构化查询、全文检索和模块关联图谱。
+安装和 `/kng-init` 时自动启用，支持结构化查询、全文检索和模块关联图谱。配置文件 `~/.kng-plugin/kng.config.json` 中的 `db_path` 字段指向数据库路径；删除该字段可退回纯文件模式。
 
 ### 数据库管理
 
@@ -157,7 +157,7 @@ python kng-plugin/scripts/retrieve_kb.py \
 - `active_project`：当前活跃项目，所有命令默认使用该项目
 - `kb_root`：知识库根目录（默认 `~/.kng-plugin/kb`）
 - `output_dir`：产出输出目录（相对于当前工作目录）
-- `db_path`：可选，存在且文件有效时启用 SQLite 模式，否则使用文件模式
+- `db_path`：默认启用，指向 SQLite 数据库路径；删除该字段可退回纯文件模式
 
 可通过 `KNG_HOME` 环境变量自定义数据目录位置（默认 `~/.kng-plugin`）。
 
