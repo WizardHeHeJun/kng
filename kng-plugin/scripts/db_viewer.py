@@ -14,15 +14,29 @@ import json
 import os
 import sqlite3
 import sys
+import threading
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any, Dict, List, Optional, Tuple
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FAVICON_DATA = ""
-_favicon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Elysia.png")
+_favicon_path = os.path.join(_SCRIPT_DIR, "Elysia.png")
 if os.path.isfile(_favicon_path):
     with open(_favicon_path, "rb") as _f:
         _FAVICON_DATA = base64.b64encode(_f.read()).decode("ascii")
+
+
+def _read_plugin_version() -> str:
+    pj = os.path.join(_SCRIPT_DIR, "..", ".claude-plugin", "plugin.json")
+    try:
+        with open(pj, "r", encoding="utf-8") as f:
+            return json.load(f).get("version", "unknown")
+    except Exception:
+        return "unknown"
+
+
+_VIEWER_VERSION = _read_plugin_version()
 
 # ── HTML Templates ──
 
@@ -125,6 +139,35 @@ tr:hover td { background: #fafafa; }
     border: none; border-radius: 4px;
     padding: 2px 8px; font-size: 12px; margin: 1px 2px;
     color: var(--text2);
+}
+details.tag-collapse { display: inline; }
+details.tag-collapse > summary {
+    display: inline-block; list-style: none; cursor: pointer;
+    background: #fff0f6; color: var(--accent);
+    border-radius: 4px; padding: 2px 8px; font-size: 12px;
+    margin: 1px 2px; user-select: none;
+}
+details.tag-collapse > summary::-webkit-details-marker { display: none; }
+details.tag-collapse > summary::marker { content: ""; }
+details.tag-collapse[open] > summary { background: var(--surface2); color: var(--text2); }
+
+.entry-tabs { margin-bottom: 16px; }
+.entry-tabs > input[type=radio] { display: none; }
+.entry-tabs > label {
+    display: inline-block; padding: 6px 14px; cursor: pointer;
+    font-size: 13px; color: var(--text2);
+    border-bottom: 2px solid transparent; user-select: none;
+    margin-right: 4px;
+}
+.entry-tabs > label:hover { color: var(--text); }
+.entry-tabs > .tab-pane { display: none; }
+.entry-tabs > input.tab-radio-doc:checked ~ label.tab-label-doc,
+.entry-tabs > input.tab-radio-code:checked ~ label.tab-label-code {
+    color: var(--accent); border-bottom-color: var(--accent); font-weight: 600;
+}
+.entry-tabs > input.tab-radio-doc:checked ~ .tab-pane.tab-pane-doc,
+.entry-tabs > input.tab-radio-code:checked ~ .tab-pane.tab-pane-code {
+    display: block;
 }
 .badge {
     display: inline-block; padding: 2px 8px; border-radius: 4px;
@@ -360,6 +403,24 @@ def _truncate(text: str, maxlen: int = 120) -> str:
     return text[:maxlen] + "..." if len(text) > maxlen else text
 
 
+_TAG_COLLAPSE_THRESHOLD = 3
+
+
+def _collapse_tag_parts(parts: List[str]) -> str:
+    if len(parts) <= _TAG_COLLAPSE_THRESHOLD:
+        return " ".join(parts)
+    visible = " ".join(parts[:_TAG_COLLAPSE_THRESHOLD])
+    hidden = " ".join(parts[_TAG_COLLAPSE_THRESHOLD:])
+    extra = len(parts) - _TAG_COLLAPSE_THRESHOLD
+    return (
+        f'{visible} '
+        f'<details class="tag-collapse">'
+        f'<summary>+{extra} 更多</summary> '
+        f'{hidden}'
+        f'</details>'
+    )
+
+
 def _tags_html(tags_json: str) -> str:
     try:
         tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
@@ -367,7 +428,8 @@ def _tags_html(tags_json: str) -> str:
         return _e(str(tags_json))
     if not tags:
         return '<span style="color:var(--text2)">—</span>'
-    return " ".join(f'<span class="tag">{_e(t)}</span>' for t in tags)
+    parts = [f'<span class="tag">{_e(t)}</span>' for t in tags]
+    return _collapse_tag_parts(parts)
 
 
 _RISK_LABELS = {"high": "高", "medium": "中", "low": "低"}
@@ -477,9 +539,8 @@ def _tags_html_translated(tags_json: str, name_map: Dict[str, str]) -> str:
         return _e(str(tags_json))
     if not tags:
         return '<span style="color:var(--text2)">—</span>'
-    return " ".join(
-        f'<span class="tag">{_e(name_map.get(t, t))}</span>' for t in tags
-    )
+    parts = [f'<span class="tag">{_e(name_map.get(t, t))}</span>' for t in tags]
+    return _collapse_tag_parts(parts)
 
 
 def _module_tags_html(tags_json: str, name_map: Dict[str, str], project_id: str = "") -> str:
@@ -497,7 +558,7 @@ def _module_tags_html(tags_json: str, name_map: Dict[str, str], project_id: str 
             f'<a href="/module/{urllib.parse.quote(str(t))}{qs}" '
             f'class="tag" style="cursor:pointer;color:var(--accent)">{_e(display)}</a>'
         )
-    return " ".join(parts)
+    return _collapse_tag_parts(parts)
 
 
 def _module_link(module_id: str, name_map: Dict[str, str], project_id: str = "") -> str:
@@ -1109,30 +1170,42 @@ def page_module_detail(db: sqlite3.Connection, module_id: str, project: str = ""
             </tr>""")
         return "".join(out)
 
-    if entries:
-        entries_html = f"""
-        <h3>本模块知识条目（{len(entries)} 条）</h3>
-        <div style="overflow-x:auto">
-        <table>
-        <thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>
-        <tbody>{_entry_rows(entries)}</tbody>
-        </table>
+    def _split_doc_code(items):
+        docs, codes = [], []
+        for e in items:
+            sf = (e["source_file"] or "").lower()
+            (codes if sf.endswith("-code.md") else docs).append(e)
+        return docs, codes
+
+    def _entries_block(title: str, items, slot: str) -> str:
+        docs, codes = _split_doc_code(items)
+        empty_pane = '<div class="empty" style="padding:16px">无</div>'
+        doc_table = (f'<div style="overflow-x:auto"><table>'
+                     f'<thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>'
+                     f'<tbody>{_entry_rows(docs)}</tbody></table></div>') if docs else empty_pane
+        code_table = (f'<div style="overflow-x:auto"><table>'
+                      f'<thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>'
+                      f'<tbody>{_entry_rows(codes)}</tbody></table></div>') if codes else empty_pane
+        return f"""
+        <h3>{title}（{len(items)} 条）</h3>
+        <div class="entry-tabs">
+            <input type="radio" name="entries-{slot}" id="tab-doc-{slot}" class="tab-radio-doc" checked>
+            <input type="radio" name="entries-{slot}" id="tab-code-{slot}" class="tab-radio-code">
+            <label for="tab-doc-{slot}" class="tab-label-doc">文档（{len(docs)}）</label>
+            <label for="tab-code-{slot}" class="tab-label-code">代码（{len(codes)}）</label>
+            <div class="tab-pane tab-pane-doc">{doc_table}</div>
+            <div class="tab-pane tab-pane-code">{code_table}</div>
         </div>
         <br>"""
+
+    if entries:
+        entries_html = _entries_block("本模块知识条目", entries, "own")
     else:
         entries_html = '<h3>本模块知识条目</h3><div class="empty" style="padding:16px">暂无知识条目</div><br>'
 
     related_html = ""
     if related_entries:
-        related_html = f"""
-        <h3>关联到本模块的条目（{len(related_entries)} 条）</h3>
-        <div style="overflow-x:auto">
-        <table>
-        <thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>
-        <tbody>{_entry_rows(related_entries)}</tbody>
-        </table>
-        </div>
-        <br>"""
+        related_html = _entries_block("关联到本模块的条目", related_entries, "rel")
 
     body = f"""
     <h2>模块：{_e(mod['name'])} <span style="color:var(--text2);font-size:14px">（{_e(module_id)}）</span></h2>
@@ -1225,6 +1298,12 @@ class KngViewerHandler(BaseHTTPRequestHandler):
                 for t in tables:
                     stats[t] = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
                 self._respond(200, json.dumps(stats, indent=2), "application/json")
+            elif path == "/api/version":
+                payload = {"version": _VIEWER_VERSION, "pid": os.getpid()}
+                self._respond(200, json.dumps(payload), "application/json")
+            elif path == "/api/shutdown":
+                self._respond(200, json.dumps({"shutdown": True}), "application/json")
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
             else:
                 self._respond(404, _layout("404", '<div class="empty">页面未找到</div>'))
         except Exception as ex:
@@ -1255,7 +1334,7 @@ def main() -> int:
 
     KngViewerHandler.db_path = args.db
     server = HTTPServer((args.host, args.port), KngViewerHandler)
-    print(f"KNG 知识库查看器已启动：http://{args.host}:{args.port}")
+    print(f"KNG 知识库查看器已启动：http://{args.host}:{args.port}（v{_VIEWER_VERSION}, pid={os.getpid()}）")
     print(f"数据库：{args.db}")
     print("按 Ctrl+C 停止。")
     try:
