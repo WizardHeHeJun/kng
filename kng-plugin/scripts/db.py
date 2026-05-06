@@ -777,6 +777,22 @@ class KngDatabase:
             )
         return [dict(r) for r in rows]
 
+    # ── Sync ──
+
+    def purge_stale_entries(self) -> int:
+        """Remove kb_entries whose source_file no longer exists on disk."""
+        import pathlib as _pl
+        rows = self.conn.execute(
+            "SELECT id, source_file FROM kb_entries WHERE source_file IS NOT NULL AND source_file != ''"
+        ).fetchall()
+        stale_ids = [r["id"] for r in rows if not _pl.Path(r["source_file"]).exists()]
+        if not stale_ids:
+            return 0
+        placeholders = ",".join("?" * len(stale_ids))
+        self.conn.execute(f"DELETE FROM kb_entries WHERE id IN ({placeholders})", stale_ids)
+        self.conn.commit()
+        return len(stale_ids)
+
     # ── Stats ──
 
     def get_stats(self) -> Dict[str, Any]:

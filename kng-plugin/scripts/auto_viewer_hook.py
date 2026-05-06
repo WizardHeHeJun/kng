@@ -13,6 +13,7 @@ import sys
 import urllib.request
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
 VIEWER_SCRIPT = SCRIPT_DIR / "db_viewer.py"
 VIEWER_PORT = 8787
 VIEWER_URL = f"http://127.0.0.1:{VIEWER_PORT}"
@@ -58,6 +59,19 @@ def _start_viewer(db_path: str):
         )
 
 
+def _purge_stale(db_path: str) -> int:
+    try:
+        from db import KngDatabase
+        db = KngDatabase(db_path)
+        db.connect()
+        db.initialize()
+        removed = db.purge_stale_entries()
+        db.close()
+        return removed
+    except Exception:
+        return 0
+
+
 def main():
     kng_home = _resolve_kng_home()
     config = _load_config(kng_home)
@@ -66,18 +80,24 @@ def main():
     if not db_path or not pathlib.Path(db_path).exists():
         sys.exit(0)
 
-    if _viewer_is_running():
-        sys.exit(0)
+    removed = _purge_stale(db_path)
 
-    _start_viewer(db_path)
+    context_parts = []
+    if removed > 0:
+        context_parts.append(f"已自动清理 {removed} 条过期知识库条目（源文件已删除）")
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": f"知识库查看器已启动：{VIEWER_URL}",
+    if not _viewer_is_running():
+        _start_viewer(db_path)
+        context_parts.append(f"知识库查看器已启动：{VIEWER_URL}")
+
+    if context_parts:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n".join(context_parts),
+            }
         }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+        print(json.dumps(output, ensure_ascii=False))
     sys.exit(0)
 
 

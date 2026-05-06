@@ -39,6 +39,29 @@ npx kng-plugin install
 
 安装时会自动在 `~/.kng-plugin/` 下创建数据目录（可通过 `KNG_HOME` 环境变量自定义位置）。
 
+### 安装能力库技能
+
+框架本身不内置技能文件——用户根据自己的领域需求，通过 CLI 安装技能到能力库：
+
+```bash
+# 从 URL 安装（如社区分享、GitHub 链接等）
+npx kng-plugin skill install https://example.com/my-skill.md
+
+# 从本地文件安装
+npx kng-plugin skill install ./my-skill.md
+
+# 从飞书文档导入（在 Claude Code 中执行）
+/kng-kb import --type capability --from-lark <飞书文档URL>
+
+# 查看已安装的技能
+npx kng-plugin skill list
+
+# 移除技能
+npx kng-plugin skill remove my-skill
+```
+
+安装后会自动刷新 `skill-registry.yaml` 索引。
+
 ### 卸载
 
 ```bash
@@ -46,6 +69,8 @@ npx kng-plugin uninstall
 ```
 
 ## 3. 命令一览
+
+### Claude Code 内部命令
 
 | 命令 | 功能 |
 |------|------|
@@ -55,9 +80,23 @@ npx kng-plugin uninstall
 | `/kng-evolve` | 回顾产出，将反馈智能路由回知识库（学习闭环） |
 | `/kng-select [project-id]` | 切换活跃项目知识库 |
 
+### CLI 命令（终端执行）
+
+| 命令 | 功能 |
+|------|------|
+| `npx kng-plugin install` | 安装插件到 Claude Code |
+| `npx kng-plugin uninstall` | 卸载插件 |
+| `npx kng-plugin skill list` | 查看已安装的能力库技能 |
+| `npx kng-plugin skill install <url\|path>` | 安装技能（从 URL 或本地文件） |
+| `npx kng-plugin skill remove <name>` | 移除已安装的技能 |
+
 ## 4. 快速开始
 
 ```bash
+# 0. 安装能力库技能（从 URL 或本地文件）
+npx kng-plugin skill install https://example.com/my-domain-skill.md
+npx kng-plugin skill install ./my-local-skill.md
+
 # 1. 初始化项目（从飞书总览文档自动提取模块图谱）
 /kng-init my-project --from-lark <总览文档URL>
 
@@ -75,7 +114,7 @@ npx kng-plugin uninstall
 
 | 知识库 | 位置 | 用途 | 更新方式 |
 |--------|------|------|----------|
-| **能力库** | `~/.kng-plugin/kb/capability/` | 领域方法论、可调用技能工具箱 | 用户自行维护 / `/kng-kb add` |
+| **能力库** | `~/.kng-plugin/kb/capability/` | 领域方法论、可调用技能工具箱 | `npx kng-plugin skill install` / `/kng-kb add` |
 | **项目库** | `~/.kng-plugin/kb/projects/<project-id>/` | 项目业务模块、历史经验、约束规范 | `/kng-kb add` / `/kng-kb import` / `/kng-code import` / `/kng-evolve` |
 
 所有知识库数据存放在 `~/.kng-plugin/` 下（可通过 `KNG_HOME` 环境变量自定义），不受插件更新影响。项目库按项目隔离，初始化后包含：

@@ -196,17 +196,245 @@ function uninstall() {
   success("KNG plugin removed.");
 }
 
+// ── Skill Management ──
+
+function getCapabilityDir() {
+  const dir = path.join(getKngHome(), "kb", "capability");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function getInstalledSkills() {
+  const dir = getCapabilityDir();
+  try {
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
+  } catch {
+    return [];
+  }
+}
+
+function downloadFile(url, destPath) {
+  const script = [
+    "const https=require('https'),http=require('http'),fs=require('fs');",
+    "function get(u,r){if(r>5){process.exit(1);}",
+    "const mod=u.startsWith('https')?https:http;",
+    "mod.get(u,{headers:{'User-Agent':'kng-plugin'}},res=>{",
+    "if(res.statusCode>=300&&res.statusCode<400&&res.headers.location){",
+    "let loc=res.headers.location;",
+    "if(loc.startsWith('/'))loc=new URL(u).origin+loc;",
+    "get(loc,r+1);}",
+    "else if(res.statusCode===200){",
+    "const chunks=[];res.on('data',c=>chunks.push(c));",
+    "res.on('end',()=>{fs.writeFileSync(process.argv[2],Buffer.concat(chunks));process.exit(0);});}",
+    "else{process.exit(1);}",
+    "}).on('error',()=>process.exit(1));}",
+    "get(process.argv[1],0);",
+  ].join("");
+
+  const result = spawnSync("node", ["-e", script, url, destPath], {
+    timeout: 30000,
+    stdio: "pipe",
+  });
+  if (result.status !== 0) {
+    throw new Error("Download failed" + (result.stderr ? ": " + result.stderr.toString().trim() : ""));
+  }
+}
+
+function refreshRegistry() {
+  const capDir = getCapabilityDir();
+  const scriptPath = path.join(PACKAGE_ROOT, "kng-plugin", "scripts", "generate_registry.py");
+  if (!fs.existsSync(scriptPath)) {
+    return;
+  }
+  try {
+    execSync(`python "${scriptPath}" "${capDir}"`, {
+      stdio: "pipe",
+      encoding: "utf-8",
+      timeout: 15000,
+    });
+  } catch {
+    warn("Could not refresh registry (python may not be installed).");
+  }
+}
+
+function skillList() {
+  const installed = getInstalledSkills();
+  const capDir = getCapabilityDir();
+
+  console.log(`\n${CYAN}Installed Skills${RESET} (${capDir})\n`);
+
+  if (installed.length === 0) {
+    console.log(`  (empty)\n`);
+    console.log(`  Install skills from:`);
+    console.log(`    URL:    ${CYAN}npx kng-plugin skill install <url>${RESET}`);
+    console.log(`    File:   ${CYAN}npx kng-plugin skill install <path.md>${RESET}`);
+    console.log(`    Feishu: ${CYAN}npx kng-plugin skill install --from-lark <url>${RESET}\n`);
+    return;
+  }
+
+  for (const filename of installed.sort()) {
+    const filePath = path.join(capDir, filename);
+    const name = filename.replace(/\.md$/, "");
+    let title = name;
+    try {
+      const head = fs.readFileSync(filePath, "utf-8").slice(0, 500);
+      const match = head.match(/^#\s+(.+)/m);
+      if (match) title = match[1].trim();
+    } catch {}
+    console.log(`  ${name.padEnd(32)} ${title}`);
+  }
+
+  console.log(`\n  Total: ${installed.length} skill(s)\n`);
+}
+
+function installFromUrl(url) {
+  let filename;
+  try {
+    const urlPath = new URL(url).pathname;
+    filename = path.basename(urlPath);
+  } catch {
+    filename = "downloaded-skill.md";
+  }
+  if (!filename.endsWith(".md")) {
+    filename = filename + ".md";
+  }
+
+  const destPath = path.join(getCapabilityDir(), filename);
+  log(`Downloading from URL: ${url}`);
+
+  try {
+    downloadFile(url, destPath);
+    success(`Installed: ${filename}`);
+    refreshRegistry();
+  } catch (e) {
+    error(`Failed to download: ${e.message}`);
+  }
+}
+
+function installFromLocalFile(filePath) {
+  const absPath = path.resolve(filePath);
+  if (!fs.existsSync(absPath)) {
+    error(`File not found: ${absPath}`);
+    return;
+  }
+  const filename = path.basename(absPath);
+  const destPath = path.join(getCapabilityDir(), filename);
+
+  log(`Copying from local file: ${absPath}`);
+  fs.copyFileSync(absPath, destPath);
+  success(`Installed: ${filename}`);
+  refreshRegistry();
+}
+
+function installFromLark(url) {
+  warn("Feishu/Lark import requires the lark-cli skill inside Claude Code.\n");
+  console.log(`  Run the following command inside Claude Code:\n`);
+  console.log(`    ${CYAN}/kng-kb import --type capability --from-lark ${url}${RESET}\n`);
+  console.log(`  This will fetch the document and install it as a capability skill.\n`);
+}
+
+function skillInstall(args) {
+  if (args.length === 0) {
+    error("No source specified.");
+    console.log(`  Usage: kng-plugin skill install <url|path.md> [--from-lark <url>]`);
+    process.exit(1);
+  }
+
+  const larkIdx = args.indexOf("--from-lark");
+  if (larkIdx !== -1) {
+    const larkUrl = args[larkIdx + 1];
+    if (!larkUrl) {
+      error("Missing URL after --from-lark");
+      process.exit(1);
+    }
+    return installFromLark(larkUrl);
+  }
+
+  const positional = args.filter((a) => !a.startsWith("--"));
+
+  for (const source of positional) {
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      installFromUrl(source);
+    } else {
+      installFromLocalFile(source);
+    }
+  }
+}
+
+function skillRemove(args) {
+  if (args.length === 0) {
+    error("No skill name specified.");
+    console.log(`  Usage: kng-plugin skill remove <name>`);
+    process.exit(1);
+  }
+
+  const name = args[0];
+  const capDir = getCapabilityDir();
+  const filename = name.endsWith(".md") ? name : name + ".md";
+  const filePath = path.join(capDir, filename);
+
+  if (!fs.existsSync(filePath)) {
+    error(`Skill "${name}" is not installed.`);
+    const installed = getInstalledSkills();
+    const matches = [...installed].filter((f) => f.includes(name));
+    if (matches.length > 0) {
+      console.log(`  Matching installed skills: ${matches.join(", ")}`);
+    }
+    return;
+  }
+
+  fs.unlinkSync(filePath);
+  success(`Removed: ${filename}`);
+  refreshRegistry();
+}
+
+function skillHelp() {
+  console.log(`
+${CYAN}KNG Skill Manager${RESET}
+
+Usage:
+  kng-plugin skill list                        List installed skills
+  kng-plugin skill install <url>               Install from HTTP URL
+  kng-plugin skill install <path.md>           Install from local file
+  kng-plugin skill install --from-lark <url>   Import from Feishu (via Claude Code)
+  kng-plugin skill remove <name>               Remove an installed skill
+
+Examples:
+  kng-plugin skill install https://example.com/my-skill.md
+  kng-plugin skill install ./custom-skill.md
+  kng-plugin skill install --from-lark https://xxx.feishu.cn/wiki/xxx
+  kng-plugin skill remove my-skill
+`);
+}
+
+function skillCommand(args) {
+  const subCmd = args[0];
+  switch (subCmd) {
+    case "list":
+      return skillList();
+    case "install":
+      return skillInstall(args.slice(1));
+    case "remove":
+      return skillRemove(args.slice(1));
+    default:
+      return skillHelp();
+  }
+}
+
+// ── Help ──
+
 function showHelp() {
   console.log(`
 ${CYAN}KNG — Knowledge-driven Generator${RESET}
 
 Usage:
-  kng-plugin install      Install the plugin into Claude Code
-  kng-plugin uninstall    Remove the plugin from Claude Code
-  kng-plugin help         Show this help message
-
-Quick install:
-  npx kng-plugin install
+  kng-plugin install                   Install the plugin into Claude Code
+  kng-plugin uninstall                 Remove the plugin from Claude Code
+  kng-plugin skill list                List installed capability skills
+  kng-plugin skill install <url>       Install skill from URL
+  kng-plugin skill install <file.md>   Install skill from local file
+  kng-plugin skill remove <name>       Remove a skill from capability KB
+  kng-plugin help                      Show this help message
 
 Data directory: ~/.kng-plugin/ (override with KNG_HOME env var)
 `);
@@ -221,6 +449,9 @@ switch (command) {
     break;
   case "uninstall":
     uninstall();
+    break;
+  case "skill":
+    skillCommand(process.argv.slice(3));
     break;
   case "help":
   case "--help":
