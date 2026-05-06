@@ -186,7 +186,6 @@ kng-plugin/                       # 插件包（npm 安装，只读）
     kng-kb/                       # 知识库管理
     kng-evolve/                   # 反馈学习进化
     kng-select/                   # 项目切换
-    test-design-methodology/      # 测试设计方法论（自动加载）
   schemas/
     test_design.schema.json       # 测试设计 JSON Schema
 bin/

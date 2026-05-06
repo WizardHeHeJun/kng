@@ -2,7 +2,7 @@
 name: kng-init
 description: "Initialize a new project knowledge base with template files for KNG"
 argument-hint: "<project-id> [--from-lark <overview-doc-url>]"
-allowed-tools: [Read, Write, Glob, Bash, Skill]
+allowed-tools: [Read, Write, Edit, Glob, Bash]
 ---
 
 # KNG Project Initialization

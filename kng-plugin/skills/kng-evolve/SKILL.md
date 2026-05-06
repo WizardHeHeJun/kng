@@ -2,7 +2,7 @@
 name: kng-evolve
 description: "Review test design output, capture feedback, and evolve knowledge base entries. Feed learnings back into capability or project KB."
 argument-hint: "[--source <test-design.json|test-design.md>] [--type capability|project] [--project <id>]"
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Skill]
 ---
 
 # KNG Knowledge Evolution
