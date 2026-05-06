@@ -1,15 +1,15 @@
 {
   "name": "kng-marketplace",
-  "description": "KNG — Knowledge-driven Next-Gen Test Agent",
+  "description": "KNG — Knowledge-driven Generator",
   "owner": {
-    "name": "QA Team"
+    "name": "KNG Team"
   },
   "plugins": [
     {
       "name": "kng",
-      "description": "Knowledge-driven Test Generator：双知识库驱动的游戏测试设计工具",
+      "description": "Knowledge-driven Generator：双知识库驱动的领域知识作业工具",
       "author": {
-        "name": "QA Team"
+        "name": "KNG Team"
       },
       "source": "./kng-plugin",
       "category": "development"

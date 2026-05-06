@@ -50,3 +50,6 @@ kng-plugin/kb/projects/
 
 # Claude Code session data
 .claude/
+
+# Claude Code instruction files
+CLAUDE.md
