@@ -482,6 +482,35 @@ def _tags_html_translated(tags_json: str, name_map: Dict[str, str]) -> str:
     )
 
 
+def _module_tags_html(tags_json: str, name_map: Dict[str, str], project_id: str = "") -> str:
+    try:
+        tags = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+    except (json.JSONDecodeError, TypeError):
+        return _e(str(tags_json))
+    if not tags:
+        return '<span style="color:var(--text2)">—</span>'
+    qs = f"?project={urllib.parse.quote(project_id)}" if project_id else ""
+    parts = []
+    for t in tags:
+        display = name_map.get(t, t)
+        parts.append(
+            f'<a href="/module/{urllib.parse.quote(str(t))}{qs}" '
+            f'class="tag" style="cursor:pointer;color:var(--accent)">{_e(display)}</a>'
+        )
+    return " ".join(parts)
+
+
+def _module_link(module_id: str, name_map: Dict[str, str], project_id: str = "") -> str:
+    if not module_id:
+        return '<span style="color:var(--text2)">—</span>'
+    display = name_map.get(module_id, module_id) if name_map else module_id
+    qs = f"?project={urllib.parse.quote(project_id)}" if project_id else ""
+    return (
+        f'<a href="/module/{urllib.parse.quote(str(module_id))}{qs}">'
+        f'{_e(display)}</a>'
+    )
+
+
 def _render_table_rows(cur, rows, table: str, hidden_cols: set,
                        module_names: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
     """Render table header + tbody HTML from cursor metadata and rows."""
@@ -492,9 +521,11 @@ def _render_table_rows(cur, rows, table: str, hidden_cols: set,
 
     header = "".join(f"<th>{_e(_COLUMN_LABELS.get(c, c))}</th>" for c in cols)
     id_col_idx = next((i for i, c in enumerate(all_cols) if c == "id"), None)
+    project_id_idx = next((i for i, c in enumerate(all_cols) if c == "project_id"), None)
     tbody = []
     for row in rows:
         row_id = row[id_col_idx] if id_col_idx is not None else None
+        row_pid = row[project_id_idx] if project_id_idx is not None else ""
         cells = []
         for i, col in zip(col_indices, cols):
             val = row[i]
@@ -506,8 +537,10 @@ def _render_table_rows(cur, rows, table: str, hidden_cols: set,
                 cells.append(f"<td>{_e(_truncate(str(val), 60))}</td>")
             elif col == "entry_type" and val:
                 cells.append(f"<td>{_e(_ENTRY_TYPE_LABELS.get(val, val))}</td>")
-            elif col == "related_modules" and mod_map:
-                cells.append(f"<td>{_tags_html_translated(val, mod_map)}</td>")
+            elif col in ("module_id", "from_module", "to_module"):
+                cells.append(f"<td>{_module_link(val, mod_map, row_pid or '')}</td>")
+            elif col == "related_modules":
+                cells.append(f"<td>{_module_tags_html(val, mod_map, row_pid or '')}</td>")
             elif col in ("tags", "covers", "required_skills",
                          "extra_tags", "test_focus", "capability_hits",
                          "project_hits", "routed_to"):
@@ -700,7 +733,9 @@ def page_table(db: sqlite3.Connection, table: str, page: int = 1,
         body = f'<h2>{_e(table_label)}</h2><div class="empty">暂无数据</div>'
         return _layout(table_label, body, f"/table/{table}", project, project_name)
 
-    header, tbody_html = _render_table_rows(cur, rows, table, hidden_cols)
+    mod_map = {r["module_id"]: r["name"] for r in
+               db.execute("SELECT module_id, name FROM modules").fetchall()}
+    header, tbody_html = _render_table_rows(cur, rows, table, hidden_cols, mod_map)
 
     total_pages = (total + per_page - 1) // per_page
     pag = _pagination(page, total_pages, f"/table/{table}", project)
@@ -955,6 +990,161 @@ def page_modules(db: sqlite3.Connection) -> str:
     return _layout("模块关联", body, "/modules")
 
 
+_REL_TYPE_LABELS = {
+    "depends_on": "依赖",
+    "feeds_into": "输出到",
+    "shares_state": "共享状态",
+    "triggers": "触发",
+}
+
+
+def page_module_detail(db: sqlite3.Connection, module_id: str, project: str = "") -> str:
+    if project:
+        mod = db.execute(
+            "SELECT * FROM modules WHERE module_id=? AND project_id=?",
+            (module_id, project),
+        ).fetchone()
+    else:
+        mod = db.execute(
+            "SELECT * FROM modules WHERE module_id=? LIMIT 1",
+            (module_id,),
+        ).fetchone()
+
+    if not mod:
+        body = f'<h2>模块未找到</h2><div class="empty">未找到模块 {_e(module_id)}</div>'
+        return _layout("模块未找到", body, "/modules", project, _get_project_name(db, project))
+
+    pid = mod["project_id"]
+    project_name = _get_project_name(db, pid)
+
+    mod_name_map = {
+        m["module_id"]: m["name"]
+        for m in db.execute(
+            "SELECT module_id, name FROM modules WHERE project_id=?", (pid,)
+        ).fetchall()
+    }
+
+    info = f"""
+    <div class="detail-grid">
+        <div class="k">模块ID</div><div class="v">{_e(mod['module_id'])}</div>
+        <div class="k">名称</div><div class="v">{_e(mod['name'])}</div>
+        <div class="k">所属项目</div><div class="v">{_e(pid)} — {_e(project_name)}</div>
+        <div class="k">描述</div><div class="v">{_e(mod['description'] or '—')}</div>
+    </div>
+    """
+
+    out_rels = db.execute(
+        "SELECT to_module, type, risk_level, description FROM module_relations "
+        "WHERE project_id=? AND from_module=? ORDER BY to_module",
+        (pid, module_id),
+    ).fetchall()
+    in_rels = db.execute(
+        "SELECT from_module, type, risk_level, description FROM module_relations "
+        "WHERE project_id=? AND to_module=? ORDER BY from_module",
+        (pid, module_id),
+    ).fetchall()
+
+    rel_blocks = []
+    if out_rels:
+        rows_html = []
+        for r in out_rels:
+            sym = _REL_TYPE_LABELS.get(r["type"], r["type"])
+            rows_html.append(f"""<tr>
+                <td class="rel-arrow">{_e(sym)}</td>
+                <td>{_module_link(r['to_module'], mod_name_map, pid)}</td>
+                <td>{_risk_badge(r['risk_level'])}</td>
+                <td>{_e(r['description'] or '—')}</td>
+            </tr>""")
+        rel_blocks.append(f"""
+        <h3>输出关系（{len(out_rels)} 条）</h3>
+        <table>
+        <thead><tr><th>关系</th><th>目标模块</th><th>风险</th><th>说明</th></tr></thead>
+        <tbody>{"".join(rows_html)}</tbody>
+        </table>
+        <br>""")
+
+    if in_rels:
+        rows_html = []
+        for r in in_rels:
+            sym = _REL_TYPE_LABELS.get(r["type"], r["type"])
+            rows_html.append(f"""<tr>
+                <td>{_module_link(r['from_module'], mod_name_map, pid)}</td>
+                <td class="rel-arrow">{_e(sym)}</td>
+                <td>{_risk_badge(r['risk_level'])}</td>
+                <td>{_e(r['description'] or '—')}</td>
+            </tr>""")
+        rel_blocks.append(f"""
+        <h3>输入关系（{len(in_rels)} 条）</h3>
+        <table>
+        <thead><tr><th>源模块</th><th>关系</th><th>风险</th><th>说明</th></tr></thead>
+        <tbody>{"".join(rows_html)}</tbody>
+        </table>
+        <br>""")
+
+    if not rel_blocks:
+        rel_blocks.append('<h3>关联关系</h3><div class="empty" style="padding:16px">暂无关联关系</div>')
+
+    entries = db.execute(
+        "SELECT id, title, kb_type, entry_type, source_file FROM kb_entries "
+        "WHERE module_id=? AND project_id=? ORDER BY id DESC",
+        (module_id, pid),
+    ).fetchall()
+    related_entries = db.execute(
+        """SELECT id, title, kb_type, entry_type, source_file FROM kb_entries
+           WHERE project_id=? AND (module_id IS NULL OR module_id != ?)
+                 AND related_modules LIKE ? ORDER BY id DESC""",
+        (pid, module_id, f'%"{module_id}"%'),
+    ).fetchall()
+
+    def _entry_rows(items):
+        out = []
+        for e in items:
+            et_label = _ENTRY_TYPE_LABELS.get(e["entry_type"], e["entry_type"])
+            out.append(f"""<tr>
+                <td><a href="/entry/{e['id']}">{_e(e['id'])}</a></td>
+                <td><a href="/entry/{e['id']}">{_e(e['title'])}</a></td>
+                <td>{_kb_type_badge(e['kb_type'])}</td>
+                <td>{_e(et_label)}</td>
+                <td>{_e(e['source_file'] or '—')}</td>
+            </tr>""")
+        return "".join(out)
+
+    if entries:
+        entries_html = f"""
+        <h3>本模块知识条目（{len(entries)} 条）</h3>
+        <div style="overflow-x:auto">
+        <table>
+        <thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>
+        <tbody>{_entry_rows(entries)}</tbody>
+        </table>
+        </div>
+        <br>"""
+    else:
+        entries_html = '<h3>本模块知识条目</h3><div class="empty" style="padding:16px">暂无知识条目</div><br>'
+
+    related_html = ""
+    if related_entries:
+        related_html = f"""
+        <h3>关联到本模块的条目（{len(related_entries)} 条）</h3>
+        <div style="overflow-x:auto">
+        <table>
+        <thead><tr><th>ID</th><th>标题</th><th>库类型</th><th>条目类型</th><th>源文件</th></tr></thead>
+        <tbody>{_entry_rows(related_entries)}</tbody>
+        </table>
+        </div>
+        <br>"""
+
+    body = f"""
+    <h2>模块：{_e(mod['name'])} <span style="color:var(--text2);font-size:14px">（{_e(module_id)}）</span></h2>
+    {info}
+    {"".join(rel_blocks)}
+    {entries_html}
+    {related_html}
+    <a href="/modules">&larr; 返回模块关联图谱</a>
+    """
+    return _layout(f"模块 {module_id}", body, "/modules", pid, project_name)
+
+
 def _pagination(page: int, total_pages: int, base_url: str, project: str = "") -> str:
     if total_pages <= 1:
         return ""
@@ -1021,6 +1211,10 @@ class KngViewerHandler(BaseHTTPRequestHandler):
                 self._respond(200, page_search(db, q, project=proj))
             elif path == "/modules":
                 self._respond(200, page_modules(db))
+            elif path.startswith("/module/"):
+                mod_id = urllib.parse.unquote(path[8:])
+                proj = params.get("project", "")
+                self._respond(200, page_module_detail(db, mod_id, project=proj))
             elif path == "/api/stats":
                 tables = [
                     "projects", "modules", "module_relations", "kb_entries",
