@@ -1,6 +1,6 @@
 {
   "name": "kng-plugin",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "KNG — Knowledge-driven Next-Gen Agent Framework for Claude Code",
   "license": "MIT",
   "author": {
