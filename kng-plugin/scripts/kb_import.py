@@ -133,10 +133,23 @@ def import_capability(db: KngDatabase, capability_dir: pathlib.Path,
     cap_files = read_kb_files(capability_dir)
     for path, content in cap_files:
         source = str(path)
-        if not force and db.entry_exists_by_source(source):
-            continue
         title = extract_title(content, path.stem)
         entry_type = classify_entry_type(path.name, content)
+        existing_ids = db.get_entry_ids_by_source(source)
+        if existing_ids:
+            if not force:
+                continue
+            # collapse legacy duplicates, then update the survivor in place
+            for stale_id in existing_ids[:-1]:
+                db.delete_kb_entry(stale_id)
+            db.update_kb_entry(
+                existing_ids[-1], title=title, content=content,
+                entry_type=entry_type,
+            )
+            stats["kb_entries"] += 1
+            if verbose:
+                print(f"  KB: {path.name} -> {entry_type} (updated)")
+            continue
         db.insert_kb_entry(
             title=title, content=content, kb_type="capability",
             source_file=source, entry_type=entry_type,
@@ -178,23 +191,39 @@ def import_project(db: KngDatabase, project_dir: pathlib.Path,
     proj_files = read_kb_files(project_dir)
     for path, content in proj_files:
         source = str(path)
-        if not force and db.entry_exists_by_source(source):
-            continue
         title = extract_title(content, path.stem)
         module_id = detect_module_from_filename(path.name)
         metadata = parse_metadata_comments(content)
         entry_type = classify_entry_type(path.name, content)
+        resolved_module = module_id or metadata.get("module", "")
+        related = metadata.get("related_modules", [])
+        source_url = metadata.get("source", "")
+        existing_ids = db.get_entry_ids_by_source(source)
+        if existing_ids:
+            if not force:
+                continue
+            for stale_id in existing_ids[:-1]:
+                db.delete_kb_entry(stale_id)
+            db.update_kb_entry(
+                existing_ids[-1], title=title, content=content,
+                module_id=resolved_module, entry_type=entry_type,
+                related_modules=related, source_url=source_url,
+            )
+            stats["kb_entries"] += 1
+            if verbose:
+                print(f"  KB: {path.name} -> module={resolved_module or '(none)'}, type={entry_type} (updated)")
+            continue
         db.insert_kb_entry(
             title=title, content=content, kb_type="project",
             project_id=project_id,
-            module_id=module_id or metadata.get("module", ""),
-            source_url=metadata.get("source", ""),
+            module_id=resolved_module,
+            source_url=source_url,
             source_file=source, entry_type=entry_type,
-            related_modules=metadata.get("related_modules", []),
+            related_modules=related,
         )
         stats["kb_entries"] += 1
         if verbose:
-            print(f"  KB: {path.name} -> module={module_id or '(none)'}, type={entry_type}")
+            print(f"  KB: {path.name} -> module={resolved_module or '(none)'}, type={entry_type}")
 
     return stats
 

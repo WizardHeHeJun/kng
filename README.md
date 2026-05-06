@@ -7,7 +7,7 @@
 - **可调用技能**：能力库中的技能文件即插即用，按需匹配和组合
 - **知识闭环**：输入 → 产出 → 反馈 → 演进，持续学习改进
 - **领域无关框架**：同一引擎可适配 QA、前端、后端、运营等多个领域
-- **双存储模式**：文件模式（YAML + Markdown）或 SQLite 模式（结构化 + FTS5 全文检索）
+- **默认 SQLite 存储**：安装即启用结构化数据库 + FTS5 全文检索，可降级为纯文件模式（YAML + Markdown）
 
 ## 1. 前置条件
 
@@ -17,7 +17,7 @@
 - `lark-cli`（飞书文档抓取）+ 飞书授权：
   ```bash
   lark-cli config init --new
-  lark-cli auth login --scope “drive:drive:readonly docs:document:readonly wiki:wiki:readonly”
+  lark-cli auth login --scope "drive:drive:readonly docs:document:readonly wiki:wiki:readonly"
   ```
 
 ## 2. 安装
@@ -103,8 +103,8 @@ npx kng-plugin skill install ./my-local-skill.md
 # 2. 导入项目文档到知识库（保留原始内容 + 自动审查反馈 + 递归子文档）
 /kng-kb import --from-lark <文档URL> --type project
 
-# 3. 导入关联源代码，与策划案建立互链
-/kng-code link --doc battle-skill-system.md --code "src/battle/**/*.ts"
+# 3. 导入关联源代码，与文档建立互链
+/kng-code link --doc auth-design.md --code "src/auth/**/*.ts"
 
 # 4. 完成工作后，反馈学习，演进知识库
 /kng-evolve
@@ -152,22 +152,31 @@ python kng-plugin/scripts/db.py stats --db ~/.kng-plugin/kng.db
 python kng-plugin/scripts/db_viewer.py --db ~/.kng-plugin/kng.db
 ```
 
-功能：Dashboard 总览、数据浏览（分页）、全文搜索（中文 LIKE 回退）、模块关联图谱可视化、JSON API。
+功能：
+- Dashboard 总览 / 数据浏览（分页）/ 全文搜索（中文 LIKE 回退）/ JSON API
+- 模块关联图谱可视化
+- 模块详情页（点击表格中的模块 ID 或标签直接跳转）
+- 知识条目按"文档 / 代码"分 tab，关联标签超过 3 个自动折叠
+- `/api/version`、`/api/shutdown` 端点供运维与脚本管理
 
-配置了 `db_path` 后，插件在每次对话启动时会自动检测并后台启动查看器。
+配置了 `db_path` 后，插件在每次对话启动时会自动检测并后台启动查看器。**自动版本升级**：插件升级后下次会话 SessionStart hook 会比对运行中的 viewer 与当前插件版本，不一致时优雅 shutdown 旧实例并启动新版（兜底 kill 残留 PID），无需手动重启。
+
+### 自动清理
+
+SessionStart hook 在每次会话启动时扫描 DB 中的知识条目，源文件已被删除的会自动从 DB 中清除，保证文件系统与 DB 保持一致，避免历史残留。
 
 ### 知识检索
 
 ```bash
 # 文件模式
 python kng-plugin/scripts/retrieve_kb.py \
-  --query “并发 幂等” \
+  --query "并发 幂等" \
   --capability-dir ~/.kng-plugin/kb/capability \
   --project-dir ~/.kng-plugin/kb/projects/my-project
 
 # DB 模式（关键词 / 全文检索）
 python kng-plugin/scripts/retrieve_kb.py \
-  --query “并发 幂等” \
+  --query "并发 幂等" \
   --db ~/.kng-plugin/kng.db --project my-project --mode fts
 ```
 
@@ -190,10 +199,10 @@ python kng-plugin/scripts/retrieve_kb.py \
 
 ```json
 {
-  “active_project”: “my-project”,
-  “kb_root”: “~/.kng-plugin/kb”,
-  “output_dir”: “./test-output”,
-  “db_path”: “~/.kng-plugin/kng.db”
+  "active_project": "my-project",
+  "kb_root": "~/.kng-plugin/kb",
+  "output_dir": "./test-output",
+  "db_path": "~/.kng-plugin/kng.db"
 }
 ```
 

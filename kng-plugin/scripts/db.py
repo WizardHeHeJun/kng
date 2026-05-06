@@ -468,6 +468,36 @@ class KngDatabase:
         ).fetchone()
         return row is not None
 
+    def get_entry_ids_by_source(self, source_file: str) -> List[int]:
+        rows = self.conn.execute(
+            "SELECT id FROM kb_entries WHERE source_file=? ORDER BY id",
+            (source_file,),
+        ).fetchall()
+        return [r["id"] for r in rows]
+
+    def dedupe_kb_entries_by_source(self) -> int:
+        """Collapse rows that share the same non-empty source_file, keeping the
+        newest (max id). Returns the number of rows deleted."""
+        rows = self.conn.execute(
+            """SELECT source_file, GROUP_CONCAT(id) ids, COUNT(*) c
+                 FROM kb_entries
+                WHERE source_file IS NOT NULL AND source_file != ''
+                GROUP BY source_file
+               HAVING c > 1"""
+        ).fetchall()
+        stale_ids: List[int] = []
+        for r in rows:
+            ids = sorted(int(x) for x in r["ids"].split(","))
+            stale_ids.extend(ids[:-1])
+        if not stale_ids:
+            return 0
+        placeholders = ",".join("?" * len(stale_ids))
+        self.conn.execute(
+            f"DELETE FROM kb_entries WHERE id IN ({placeholders})", stale_ids
+        )
+        self.conn.commit()
+        return len(stale_ids)
+
     def search_kb_fts(self, query: str, kb_type: str = None,
                       project_id: str = None, top_k: int = 5) -> List[Dict]:
         tokens = _normalize_text(query).split()

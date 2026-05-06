@@ -157,6 +157,19 @@ def _purge_stale(db_path: str) -> int:
         return 0
 
 
+def _dedupe_entries(db_path: str) -> int:
+    try:
+        from db import KngDatabase
+        db = KngDatabase(db_path)
+        db.connect()
+        db.initialize()
+        removed = db.dedupe_kb_entries_by_source()
+        db.close()
+        return removed
+    except Exception:
+        return 0
+
+
 def _free_port(timeout: float = 2.0) -> None:
     """Ensure VIEWER_PORT is fully released. Try graceful shutdown first,
     then force-kill any PID still bound — handles zombie listeners and the
@@ -198,11 +211,14 @@ def main():
         sys.exit(0)
 
     removed = _purge_stale(db_path)
+    deduped = _dedupe_entries(db_path)
     current_version = _current_plugin_version()
 
     context_parts = []
     if removed > 0:
         context_parts.append(f"已自动清理 {removed} 条过期知识库条目（源文件已删除）")
+    if deduped > 0:
+        context_parts.append(f"已自动合并 {deduped} 条重复知识库条目（同一 source_file 多份副本）")
 
     msg = _ensure_viewer(db_path, current_version)
     if msg:

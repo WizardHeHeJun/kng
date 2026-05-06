@@ -1,6 +1,6 @@
 {
   "name": "kng-plugin",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "private": true,
   "description": "Knowledge-driven Test Generator plugin for Claude Code"
 }
