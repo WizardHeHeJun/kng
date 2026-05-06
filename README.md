@@ -50,7 +50,8 @@ npx kng-plugin uninstall
 | 命令 | 功能 |
 |------|------|
 | `/kng-init <project-id>` | 初始化项目知识库（支持 `--from-lark <url>` 从飞书文档自动提取模块和关系） |
-| `/kng-kb list\|add\|import` | 管理知识库条目（列表 / 交互添加 / 从飞书导入） |
+| `/kng-kb list\|add\|import` | 管理知识库条目（列表 / 交互添加 / 从飞书导入，支持子文档递归） |
+| `/kng-code import\|link` | 导入本地文件（源代码 / 文档）到知识库，支持文档与代码元数据互链 |
 | `/kng-evolve` | 回顾产出，将反馈智能路由回知识库（学习闭环） |
 | `/kng-select [project-id]` | 切换活跃项目知识库 |
 
@@ -60,10 +61,13 @@ npx kng-plugin uninstall
 # 1. 初始化项目（从飞书总览文档自动提取模块图谱）
 /kng-init my-project --from-lark <总览文档URL>
 
-# 2. 导入项目文档到知识库（保留原始内容 + 自动审查反馈）
+# 2. 导入项目文档到知识库（保留原始内容 + 自动审查反馈 + 递归子文档）
 /kng-kb import --from-lark <文档URL> --type project
 
-# 3. 完成工作后，反馈学习，演进知识库
+# 3. 导入关联源代码，与策划案建立互链
+/kng-code link --doc battle-skill-system.md --code "src/battle/**/*.ts"
+
+# 4. 完成工作后，反馈学习，演进知识库
 /kng-evolve
 ```
 
@@ -72,7 +76,7 @@ npx kng-plugin uninstall
 | 知识库 | 位置 | 用途 | 更新方式 |
 |--------|------|------|----------|
 | **能力库** | `~/.kng-plugin/kb/capability/` | 领域方法论、可调用技能工具箱 | 用户自行维护 / `/kng-kb add` |
-| **项目库** | `~/.kng-plugin/kb/projects/<project-id>/` | 项目业务模块、历史经验、约束规范 | `/kng-kb add` / `/kng-kb import` / `/kng-evolve` |
+| **项目库** | `~/.kng-plugin/kb/projects/<project-id>/` | 项目业务模块、历史经验、约束规范 | `/kng-kb add` / `/kng-kb import` / `/kng-code import` / `/kng-evolve` |
 
 所有知识库数据存放在 `~/.kng-plugin/` 下（可通过 `KNG_HOME` 环境变量自定义），不受插件更新影响。项目库按项目隔离，初始化后包含：
 
@@ -183,7 +187,8 @@ kng-plugin/                       # 插件包（npm 安装，只读）
     generate_registry.py          # 能力库索引自动生成
   skills/
     kng-init/                     # 项目初始化
-    kng-kb/                       # 知识库管理
+    kng-kb/                       # 知识库管理（飞书文档导入）
+    kng-code/                     # 本地代码/文件导入 + 文档互链
     kng-evolve/                   # 反馈学习进化
     kng-select/                   # 项目切换
   schemas/
@@ -198,11 +203,12 @@ bin/
 能力库 + 项目库 → AI 产出 → 实际验证 → /kng-evolve → 知识库更新 → 下次更准确
 ```
 
-1. 通过 `/kng-kb import` 持续积累项目知识，能力库提供领域方法论
-2. AI 基于双知识库上下文完成任务，产出结构化结果
-3. 实际执行中发现遗漏或新问题
-4. `/kng-evolve` 回顾产出，反馈智能路由到对应知识文件
-5. 知识库自动更新，下次任务时自动受益 — 越用越准
+1. 通过 `/kng-kb import` 导入飞书文档、`/kng-code import` 导入本地代码，持续积累项目知识
+2. 通过 `/kng-code link` 将策划案与实现代码互链，形成完整的设计-实现知识对
+3. AI 基于双知识库上下文完成任务，产出结构化结果
+4. 实际执行中发现遗漏或新问题
+5. `/kng-evolve` 回顾产出，反馈智能路由到对应知识文件
+6. 知识库自动更新，下次任务时自动受益 — 越用越准
 
 ## License
 

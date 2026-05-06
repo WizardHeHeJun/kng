@@ -141,9 +141,61 @@ Import a Feishu/Lark document as a KB entry. **When importing to project KB, aut
 
 ### Steps
 
-1. **Fetch the document**:
+1. **Fetch the document and discover child documents**:
+
+   a. **Fetch the main document**:
    ```bash
    lark-cli docs +fetch --url "<url>" --as user
+   ```
+
+   b. **Resolve wiki node info** — extract the token from the URL and query the wiki node metadata to determine whether this document has child documents:
+
+   First, extract the token from the URL. Feishu document URLs follow these patterns:
+   - `https://*.feishu.cn/wiki/<token>` → wiki node token, use `obj_type=wiki`
+   - `https://*.feishu.cn/docx/<token>` → document token, use `obj_type=docx`
+   - Other patterns (`doc`, `sheets`, `base`, etc.) → use matching `obj_type`
+
+   Then query the node info:
+   ```bash
+   lark-cli wiki spaces get_node --params '{"token":"<extracted_token>","obj_type":"<type>"}' --as user
+   ```
+   From the response, extract: `space_id`, `node_token`, `has_child`, `title`.
+
+   c. **If `has_child` is true** — recursively collect ALL descendant document nodes:
+
+   List direct children:
+   ```bash
+   lark-cli wiki nodes list --params '{"space_id":"<space_id>","parent_node_token":"<node_token>"}' --as user --page-all
+   ```
+
+   For each child node in the response `items`:
+   - Record its `node_token`, `obj_token`, `obj_type`, `title`, and `has_child`
+   - Only include nodes where `node_type` is `"origin"` (skip shortcuts)
+   - Only include nodes where `obj_type` is `"doc"` or `"docx"` (skip sheets, bitable, files, etc.)
+   - If the child itself has `has_child: true`, recursively list ITS children using the same command with `parent_node_token` set to the child's `node_token`
+
+   Build a flat list of all descendant documents to import. Display the tree to the user:
+   ```
+   📄 主文档: <main_title>
+   ├── 📄 <child_1_title>
+   │   ├── 📄 <grandchild_1_title>
+   │   └── 📄 <grandchild_2_title>
+   └── 📄 <child_2_title>
+   共发现 N 篇子文档，将依次导入。
+   ```
+
+   d. **Process the main document first** through Steps 2–8 below, then **process each child document in tree order** through the same Steps 2–8.**每篇文档（含子文档）均必须完整保留原始内容，禁止对文档内容进行蒸馏、精简、摘要或重组。** 获取到的飞书文档内容直接写入 KB 文件，不做任何知识提炼。For each child document, fetch its content using:
+   ```bash
+   lark-cli docs +fetch --url "https://<domain>/wiki/<child_node_token>" --as user
+   ```
+   where `<domain>` is extracted from the original `--from-lark` URL.
+
+   When all documents (main + children) have been imported, display a summary:
+   ```
+   ✅ 导入完成，共导入 N 篇文档:
+   1. <module_id>/<filename>.md — <title>
+   2. <module_id>/<filename>.md — <title>
+   ...
    ```
 
 2. **Analyze document content**:
