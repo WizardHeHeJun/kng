@@ -92,9 +92,116 @@ function cleanMarketplaceCache() {
   ];
   for (const dir of dirs) {
     if (fs.existsSync(dir)) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {}
     }
   }
+}
+
+function cleanLeftoverTempDirs() {
+  const marketplacesDir = path.join(getClaudePluginDir(), "marketplaces");
+  if (!fs.existsSync(marketplacesDir)) return;
+  let entries;
+  try {
+    entries = fs.readdirSync(marketplacesDir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name.startsWith("temp_")) continue;
+    try {
+      fs.rmSync(path.join(marketplacesDir, name), { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+function sleepMs(ms) {
+  const buf = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(buf, 0, 0, ms);
+}
+
+function manualCloneMarketplace(repoUrl) {
+  const target = path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (fs.existsSync(target)) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch {}
+  }
+  const r = spawnSync("git", ["clone", "--depth=1", repoUrl, target], {
+    stdio: "pipe",
+    encoding: "utf-8",
+    timeout: 60000,
+  });
+  if (r.status === 0) return { ok: true };
+  return { ok: false, output: (r.stderr || r.stdout || "git clone failed").trim() };
+}
+
+function parseGithubRepo(url) {
+  const m = String(url).match(/github\.com[\/:]([^\/]+)\/([^\/\s]+?)(?:\.git)?$/i);
+  if (!m) return null;
+  return `${m[1]}/${m[2]}`;
+}
+
+function getKnownMarketplacesPath() {
+  return path.join(getClaudePluginDir(), "known_marketplaces.json");
+}
+
+function readKnownMarketplaces() {
+  const p = getKnownMarketplacesPath();
+  if (!fs.existsSync(p)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8")) || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeKnownMarketplaces(data) {
+  const p = getKnownMarketplacesPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(data, null, 2));
+}
+
+function registerMarketplaceEntry(repoUrl) {
+  const known = readKnownMarketplaces();
+  const repo = parseGithubRepo(repoUrl);
+  const installLocation = path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID);
+  known[MARKETPLACE_ID] = {
+    source: repo
+      ? { source: "github", repo }
+      : { source: "git", url: repoUrl },
+    installLocation,
+    lastUpdated: new Date().toISOString(),
+  };
+  writeKnownMarketplaces(known);
+}
+
+function refreshLastUpdated() {
+  const known = readKnownMarketplaces();
+  if (!known[MARKETPLACE_ID]) return;
+  known[MARKETPLACE_ID].lastUpdated = new Date().toISOString();
+  writeKnownMarketplaces(known);
+}
+
+function marketplaceIsGitRepo() {
+  const target = path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID);
+  return fs.existsSync(path.join(target, ".git"));
+}
+
+function gitPullInPlace() {
+  const target = path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID);
+  const r = spawnSync("git", ["-C", target, "pull", "--ff-only"], {
+    stdio: "pipe",
+    encoding: "utf-8",
+    timeout: 60000,
+  });
+  if (r.status === 0) {
+    refreshLastUpdated();
+    return { ok: true, output: (r.stdout || "").trim() };
+  }
+  return { ok: false, output: (r.stderr || r.stdout || "git pull failed").trim() };
 }
 
 function install() {
@@ -114,38 +221,110 @@ function install() {
   const source = REPO_URL;
   log(`Using source: ${source}`);
 
-  // Step 1: Clean old installation to ensure latest version
-  const checkResult = runClaude(`plugin marketplace list`);
-  const alreadyInstalled = checkResult.ok && checkResult.output.includes(MARKETPLACE_ID);
+  let added = false;
 
-  if (alreadyInstalled) {
-    log("Refreshing existing installation...");
-    runClaude(`plugin uninstall ${PLUGIN_NAME}`);
-    runClaude(`plugin marketplace remove ${MARKETPLACE_ID}`);
+  // Fast path: if the marketplace already exists as a git clone, update it via
+  // `git pull` in place. This avoids Claude Code's clone+rename flow, which on
+  // Windows hits EPERM (Defender/AV holds handles after clone, blocking the
+  // temp→target rename). Any future re-runs of `install` for upgrades go here.
+  if (marketplaceIsGitRepo()) {
+    log("Existing marketplace detected — updating via git pull (skips EPERM-prone path)...");
+    const pullResult = gitPullInPlace();
+    if (pullResult.ok) {
+      const summary = pullResult.output.split("\n")[0] || "up to date";
+      success(`Marketplace updated: ${summary}`);
+      added = true;
+    } else {
+      warn(`git pull failed: ${pullResult.output.split("\n")[0]}`);
+      warn("Falling back to a fresh install...");
+    }
+  }
+
+  // Fresh install path.
+  if (!added) {
+    // Always clean stale state — cache residue from a prior failed attempt won't
+    // show in `marketplace list`, so we don't gate on `alreadyInstalled`.
+    log("Cleaning any stale marketplace state...");
+    const checkResult = runClaude(`plugin marketplace list`);
+    const alreadyInstalled = checkResult.ok && checkResult.output.includes(MARKETPLACE_ID);
+    if (alreadyInstalled) {
+      runClaude(`plugin uninstall ${PLUGIN_NAME}`);
+      runClaude(`plugin marketplace remove ${MARKETPLACE_ID}`);
+    }
     cleanMarketplaceCache();
-    success("Old version cleaned.");
+    cleanLeftoverTempDirs();
+    success("State cleaned.");
+
+    // Retry `plugin marketplace add` to ride out the Windows EPERM race.
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      log(`Adding KNG marketplace (attempt ${attempt}/${maxAttempts})...`);
+      const addResult = runClaude(`plugin marketplace add "${source}"`);
+      if (addResult.ok) {
+        success("Marketplace added.");
+        added = true;
+        break;
+      }
+      const firstLine = String(addResult.output).split("\n")[0];
+      warn(`Attempt ${attempt} failed: ${firstLine}`);
+      if (attempt < maxAttempts) {
+        cleanMarketplaceCache();
+        cleanLeftoverTempDirs();
+        sleepMs(2000);
+      }
+    }
+
+    // Fallback: manual git clone + write registry entry. From this point on,
+    // any future `install` re-runs will take the git-pull fast path above.
+    if (!added) {
+      warn("Marketplace add kept failing. Falling back to manual git clone...");
+      cleanMarketplaceCache();
+      cleanLeftoverTempDirs();
+      const cloneResult = manualCloneMarketplace(source);
+      if (cloneResult.ok) {
+        try {
+          registerMarketplaceEntry(source);
+          success("Marketplace cloned and registered manually.");
+          added = true;
+        } catch (e) {
+          error(`Manual clone succeeded but registry write failed: ${e.message}`);
+        }
+      } else {
+        error(`Manual git clone also failed: ${cloneResult.output}`);
+      }
+    }
+
+    if (!added) {
+      error("Failed to register the KNG marketplace.");
+      console.log(`
+  On Windows this is usually caused by Defender/AV holding file handles
+  during the marketplace's clone+rename step. Try one of:
+
+    1. Add this folder to Defender exclusions, then re-run:
+         ${path.join(getClaudePluginDir(), "marketplaces")}
+
+    2. Manually clone, then run /reload-plugins in Claude Code:
+         git clone ${REPO_URL} ${path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID)}
+`);
+      process.exit(1);
+    }
   }
 
-  // Step 2: Add marketplace (fresh clone from GitHub)
-  log("Adding KNG marketplace...");
-  const addResult = runClaude(`plugin marketplace add "${source}"`);
-  if (addResult.ok) {
-    success("Marketplace added.");
-  } else {
-    warn(`Marketplace add returned: ${addResult.output}`);
-    log("Trying to continue with installation...");
-  }
-
-  // Step 3: Install plugin
+  // Install (or no-op if already installed).
   log("Installing kng plugin...");
   const installResult = runClaude(`plugin install ${PLUGIN_NAME}@${MARKETPLACE_ID}`);
-  if (installResult.ok) {
-    success("Plugin installed successfully!");
+  if (!installResult.ok) {
+    const out = String(installResult.output);
+    if (/already installed/i.test(out)) {
+      success("Plugin already installed (no-op on update path).");
+    } else {
+      error(`Plugin install failed: ${out}`);
+      process.exit(1);
+    }
   } else {
-    warn(`Plugin install returned: ${installResult.output}`);
+    success("Plugin installed successfully!");
   }
 
-  // Step 3: Scaffold data directory
   scaffoldKngHome();
 
   const kngHome = getKngHome();
@@ -169,6 +348,45 @@ ${GREEN}========================================${RESET}
 
   Run ${CYAN}/reload-plugins${RESET} in Claude Code to activate.
 `);
+}
+
+function update() {
+  log("Updating KNG marketplace...\n");
+
+  if (!findClaude()) {
+    error("Claude Code CLI not found.");
+    process.exit(1);
+  }
+
+  const target = path.join(getClaudePluginDir(), "marketplaces", MARKETPLACE_ID);
+  if (!fs.existsSync(target)) {
+    error("KNG marketplace not found.");
+    console.log(`  Run ${CYAN}npx kng-plugin install${RESET} first.\n`);
+    process.exit(1);
+  }
+
+  if (!marketplaceIsGitRepo()) {
+    error("Existing marketplace is not a git clone — cannot update via git pull.");
+    console.log(`
+  This usually means it was installed via Claude Code's built-in flow on a
+  prior version. To refresh, run:
+
+    ${CYAN}npx kng-plugin uninstall${RESET}
+    ${CYAN}npx kng-plugin install${RESET}
+`);
+    process.exit(1);
+  }
+
+  log("Pulling latest changes via git (no EPERM, no rename)...");
+  const pullResult = gitPullInPlace();
+  if (!pullResult.ok) {
+    error(`git pull failed: ${pullResult.output}`);
+    process.exit(1);
+  }
+
+  const summary = pullResult.output.split("\n")[0] || "up to date";
+  success(`Marketplace updated: ${summary}`);
+  console.log(`\n  Run ${CYAN}/reload-plugins${RESET} in Claude Code to pick up the changes.\n`);
 }
 
 function uninstall() {
@@ -429,6 +647,7 @@ ${CYAN}KNG — Knowledge-driven Generator${RESET}
 
 Usage:
   kng-plugin install                   Install the plugin into Claude Code
+  kng-plugin update                    Update marketplace via git pull (no EPERM)
   kng-plugin uninstall                 Remove the plugin from Claude Code
   kng-plugin skill list                List installed capability skills
   kng-plugin skill install <url>       Install skill from URL
@@ -446,6 +665,9 @@ const command = process.argv[2] || "help";
 switch (command) {
   case "install":
     install();
+    break;
+  case "update":
+    update();
     break;
   case "uninstall":
     uninstall();
