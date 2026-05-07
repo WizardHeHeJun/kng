@@ -27,6 +27,11 @@ import re
 import sys
 from typing import Any, Dict, List, Set, Tuple
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 
 def normalize_text(text: str) -> str:
     return re.sub(r"[^\w一-鿿]+", " ", text.lower())
@@ -404,12 +409,17 @@ def main_db_mode(args) -> int:
     related = db.find_related_modules(project_id, mod_id) if module_prefix else []
     related_prefixes = {r["module_id"]: r["boost"] for r in related}
 
-    mode = getattr(args, "mode", "keyword")
+    mode = getattr(args, "mode", "fts")
 
     if mode == "fts":
-        cap_hits = db.search_kb_fts(query_text, kb_type="capability", top_k=args.top_k)
-        proj_hits = db.search_kb_fts(query_text, kb_type="project",
-                                      project_id=project_id, top_k=args.top_k)
+        cap_hits = db.search_kb_fts(
+            query_text, kb_type="capability", top_k=args.top_k, boosts=boosts,
+        )
+        proj_hits = db.search_kb_fts(
+            query_text, kb_type="project", project_id=project_id, top_k=args.top_k,
+            boosts=boosts, module_prefix=module_prefix, module_boost=module_boost,
+            related_prefixes=related_prefixes,
+        )
     else:
         cap_hits = db.search_kb_keyword(
             query_kw, "capability", top_k=args.top_k, boosts=boosts,
@@ -458,8 +468,8 @@ def main() -> int:
     parser.add_argument("--project-dir", help="Path to project KB directory (file mode)")
     parser.add_argument("--db", help="Path to SQLite database (db mode)")
     parser.add_argument("--project", help="Project ID (required in db mode)")
-    parser.add_argument("--mode", choices=["keyword", "fts"], default="keyword",
-                        help="Search mode in db mode")
+    parser.add_argument("--mode", choices=["keyword", "fts"], default="fts",
+                        help="Search mode in db mode (default: fts trigram)")
     parser.add_argument("--top-k", type=int, default=5, help="Number of top results per KB")
     args = parser.parse_args()
 

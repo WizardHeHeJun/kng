@@ -23,7 +23,7 @@ import sqlite3
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS kb_entries (
 CREATE VIRTUAL TABLE IF NOT EXISTS kb_entries_fts USING fts5(
     title, content, tags,
     content=kb_entries, content_rowid=id,
-    tokenize='unicode61'
+    tokenize='trigram'
 );
 
 CREATE TRIGGER IF NOT EXISTS kb_entries_ai AFTER INSERT ON kb_entries BEGIN
@@ -180,6 +180,39 @@ def _substring_match_score(keywords: Set[str], normalized_text: str) -> float:
     return score
 
 
+def _build_trigram_query(query: str) -> str:
+    """Convert a free-text query into an FTS5 trigram MATCH expression.
+
+    The trigram tokenizer turns each phrase query into an ordered run of
+    3-char grams, equivalent to a substring match. To stay tolerant of
+    long Chinese queries, we slide a 4-char window (step 2) across each
+    contiguous chunk and OR the resulting phrases. Phrases shorter than
+    3 chars are dropped (trigram can't match them).
+    """
+    norm = re.sub(r"[^\w一-鿿]+", " ", query.lower())
+    chunks = [c for c in norm.split() if len(c) >= 3]
+    if not chunks:
+        return ""
+
+    phrases: List[str] = []
+    seen: Set[str] = set()
+    for chunk in chunks:
+        if len(chunk) <= 4:
+            cands = [chunk]
+        else:
+            cands = [chunk[i:i + 4] for i in range(0, len(chunk) - 3, 2)]
+            tail = chunk[-4:]
+            if tail != cands[-1]:
+                cands.append(tail)
+        for p in cands:
+            if p in seen:
+                continue
+            seen.add(p)
+            phrases.append(p)
+
+    return " OR ".join('"' + p.replace('"', '') + '"' for p in phrases)
+
+
 class KngDatabase:
 
     def __init__(self, db_path: str):
@@ -232,6 +265,23 @@ class KngDatabase:
             cur.execute(
                 "INSERT INTO schema_version (version, description) VALUES (?, ?)",
                 (3, "drop skill_scenarios and synonyms tables"),
+            )
+        if from_version < 4:
+            cur.execute("DROP TABLE IF EXISTS kb_entries_fts")
+            cur.execute(
+                """CREATE VIRTUAL TABLE kb_entries_fts USING fts5(
+                       title, content, tags,
+                       content=kb_entries, content_rowid=id,
+                       tokenize='trigram'
+                   )"""
+            )
+            cur.execute(
+                """INSERT INTO kb_entries_fts(rowid, title, content, tags)
+                       SELECT id, title, content, tags FROM kb_entries"""
+            )
+            cur.execute(
+                "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                (4, "switch FTS5 tokenizer to trigram for CJK retrieval"),
             )
 
     # ── Projects ──
@@ -319,9 +369,14 @@ class KngDatabase:
             mod_tags.update(_extract_keywords(mod.get("description", "")))
 
             score = float(len(query_keywords & mod_tags))
+            counted: Set[str] = set()
             for tag in mod["tags"]:
-                if len(tag) >= 2 and tag in normalized_query:
-                    score += 1.0
+                if len(tag) >= 2 and tag not in counted and tag in normalized_query:
+                    score += 2.0
+                    counted.add(tag)
+            mod_name = mod.get("name", "")
+            if len(mod_name) >= 2 and mod_name in normalized_query:
+                score += 2.0
 
             if score > best_score:
                 best_score = score
@@ -488,11 +543,20 @@ class KngDatabase:
         return len(stale_ids)
 
     def search_kb_fts(self, query: str, kb_type: str = None,
-                      project_id: str = None, top_k: int = 5) -> List[Dict]:
-        tokens = _normalize_text(query).split()
-        if not tokens:
+                      project_id: str = None, top_k: int = 5,
+                      boosts: Dict[str, float] = None,
+                      module_prefix: str = None, module_boost: float = 0.0,
+                      related_prefixes: Dict[str, float] = None) -> List[Dict]:
+        """Trigram FTS5 search with optional boost-based re-ranking.
+
+        Recall is widened to top_k * 3 internally so per-entry boosts
+        (skill registry / detected module / related modules) can re-rank
+        candidates without losing the BM25 signal."""
+        fts_query = _build_trigram_query(query)
+        if not fts_query:
             return []
-        fts_query = " OR ".join(tokens)
+
+        recall_k = top_k * 3 if (boosts or module_prefix or related_prefixes) else top_k
 
         sql = """SELECT kb.id, kb.title, kb.kb_type, kb.project_id, kb.module_id,
                         kb.source_file, kb.entry_type,
@@ -511,12 +575,12 @@ class KngDatabase:
             params.append(project_id)
 
         sql += " ORDER BY rank LIMIT ?"
-        params.append(top_k)
+        params.append(recall_k)
 
-        results = []
+        candidates: List[Dict] = []
         try:
             for row in self.conn.execute(sql, params):
-                results.append({
+                candidates.append({
                     "id": row["id"],
                     "path": row["source_file"] or row["title"],
                     "score": -row["rank"],
@@ -525,8 +589,25 @@ class KngDatabase:
                     "entry_type": row["entry_type"],
                 })
         except sqlite3.OperationalError:
-            pass
-        return results
+            return []
+
+        if boosts or module_prefix or related_prefixes:
+            for c in candidates:
+                src = c.get("path", "") or ""
+                mid = c.get("module_id", "") or ""
+                if boosts:
+                    for filename, b in boosts.items():
+                        if src.endswith(filename):
+                            c["score"] += b
+                if module_prefix and mid == module_prefix:
+                    c["score"] += module_boost
+                if related_prefixes and mid in related_prefixes:
+                    c["score"] += related_prefixes[mid]
+            candidates.sort(key=lambda x: x["score"], reverse=True)
+
+        for c in candidates[:top_k]:
+            c["score"] = round(c["score"], 2)
+        return candidates[:top_k]
 
     def search_kb_keyword(self, query_keywords: Set[str], kb_type: str,
                           project_id: str = None, top_k: int = 5,

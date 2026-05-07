@@ -174,11 +174,13 @@ python kng-plugin/scripts/retrieve_kb.py \
   --capability-dir ~/.kng-plugin/kb/capability \
   --project-dir ~/.kng-plugin/kb/projects/my-project
 
-# DB 模式（关键词 / 全文检索）
+# DB 模式（默认 fts trigram，支持中文无空格 query；可显式 --mode keyword 走旧路径）
 python kng-plugin/scripts/retrieve_kb.py \
-  --query "并发 幂等" \
-  --db ~/.kng-plugin/kng.db --project my-project --mode fts
+  --query "商店系统与哪些模块关联" \
+  --db ~/.kng-plugin/kng.db --project my-project
 ```
+
+DB 模式下 FTS5 表使用 `tokenize='trigram'` 分词器，对中文连续无空格的 query 按 4 字符滑动窗口切短并以 OR 拼接，等价于子串匹配；FTS 召回结果再叠加技能注册表 boost / 检测模块加权 / 关联模块加权重排序。
 
 ### 数据库 Schema
 
@@ -192,11 +194,40 @@ python kng-plugin/scripts/retrieve_kb.py \
 | `test_designs` | 测试设计产出追踪 |
 | `learning_feedback` | 学习反馈记录 |
 
-## 7. 自动学习
+## 7. 自动机制
+
+KNG 通过 Claude Code hook 提供两类自动化能力：每次提交 prompt 时自动检索 KB 注入上下文（§7.1），对话累积到阈值时自动收集反馈写入 pending 队列（§7.2）。
+
+### 7.1 自动检索（auto_retrieve）
+
+每次 user 提交 prompt 时，`UserPromptSubmit` hook 拦截原始输入跑一次知识库检索，把命中片段作为 `additionalContext` 注入给 Claude，让助手在回答前已经看到相关知识。
+
+```
+用户提交 prompt
+   │
+   ▼  UserPromptSubmit hook 拦截
+auto_retrieve_hook.py 读 prompt（4 秒超时）
+   │
+   ▼  retrieve_kb.py 跑 FTS5 trigram 搜索
+项目库 + 能力库命中（叠加模块检测 / 关联模块 / 技能 boost 重排）
+   │
+   ▼  Claude 看到 "## KNG 知识库自动检索结果" + top-3 片段
+助手基于真实知识作答
+```
+
+**中文支持**：FTS5 表使用 `tokenize='trigram'` 分词器（schema v4 起），对中文连续无空格的 query 按 4 字符滑动窗口切成多个 phrase 并以 OR 拼接，无需 jieba 等外部分词依赖。
+
+**跳过条件**（任一命中即静默退出，绝不阻塞用户输入）：
+- prompt 长度 < 8 字符
+- prompt 以 `/` 开头（slash 命令名不是有意义的查询语义）
+- 配置中未设 `active_project`
+- 检索 4 秒超时、子进程异常、零命中
+
+### 7.2 自动学习（auto_evolve）
 
 KNG 通过 Claude Code hook 在对话过程中自动收集反馈，无需手动跑命令也能持续沉淀经验。
 
-### 工作原理
+#### 工作原理
 
 ```
 对话进行中（每轮 user prompt）
@@ -218,12 +249,12 @@ KNG 通过 Claude Code hook 在对话过程中自动收集反馈，无需手动�
 /kng-evolve 审核候选 → 落入 KB
 ```
 
-### 两条不变量
+#### 两条不变量
 
 1. **KB 永远不被自动写**：hook 只往 pending 队列追加候选；只有用户在 `/kng-evolve` 审核后才落 KB
 2. **主对话上下文不被污染**：候选抽取由独立 subagent 完成，主助手只承担 1 次 Agent 工具调用的开销（约 200 token），不把最近 N 轮对话内容拉进自己的工作上下文
 
-### 配置或关闭
+#### 配置或关闭
 
 在 `~/.kng-plugin/kng.config.json` 顶层加 `auto_evolve` 块（不写默认开启，阈值 5/8）：
 

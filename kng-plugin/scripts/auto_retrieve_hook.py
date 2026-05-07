@@ -15,6 +15,11 @@ import pathlib
 import subprocess
 import sys
 
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 RETRIEVE_SCRIPT = SCRIPT_DIR / "retrieve_kb.py"
 
@@ -128,6 +133,7 @@ def main():
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=RETRIEVE_TIMEOUT_SEC,
             cwd=str(SCRIPT_DIR),
         )
