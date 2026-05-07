@@ -13,7 +13,6 @@
     "bin/",
     ".claude-plugin/",
     "kng-plugin/.claude-plugin/",
-    "kng-plugin/package.json",
     "kng-plugin/kb/capability/.gitkeep",
     "kng-plugin/schemas/",
     "kng-plugin/scripts/*.py",

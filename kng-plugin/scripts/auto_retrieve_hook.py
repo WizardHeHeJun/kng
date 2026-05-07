@@ -20,6 +20,7 @@ RETRIEVE_SCRIPT = SCRIPT_DIR / "retrieve_kb.py"
 
 MIN_PROMPT_LEN = 8
 MAX_CONTEXT_CHARS = 9500
+RETRIEVE_TIMEOUT_SEC = 4
 
 
 def _resolve_kng_home() -> pathlib.Path:
@@ -110,6 +111,10 @@ def main():
     prompt = input_data.get("prompt", "").strip()
     if len(prompt) < MIN_PROMPT_LEN:
         sys.exit(0)
+    # Skip slash commands (e.g. /kng-evolve) — the command name itself is
+    # not a meaningful retrieval query and only adds noise.
+    if prompt.startswith("/"):
+        sys.exit(0)
 
     kng_home = _resolve_kng_home()
     config = _load_config(kng_home)
@@ -123,7 +128,7 @@ def main():
             cmd,
             capture_output=True,
             text=True,
-            timeout=8,
+            timeout=RETRIEVE_TIMEOUT_SEC,
             cwd=str(SCRIPT_DIR),
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):

@@ -120,7 +120,7 @@ function install() {
 
   if (alreadyInstalled) {
     log("Refreshing existing installation...");
-    runClaude(`plugin uninstall ${PLUGIN_NAME} 2>/dev/null`);
+    runClaude(`plugin uninstall ${PLUGIN_NAME}`);
     runClaude(`plugin marketplace remove ${MARKETPLACE_ID}`);
     cleanMarketplaceCache();
     success("Old version cleaned.");
