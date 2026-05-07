@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bulk import flat KB files into KNG SQLite database.
 
-Imports skill-registry.yaml, synonym-aliases.yaml, project-modules.yaml,
+Imports skill-registry.yaml, project-modules.yaml,
 and all KB markdown files into the database.
 
 Usage:
@@ -23,7 +23,6 @@ from db import KngDatabase
 from retrieve_kb import (
     parse_simple_yaml,
     parse_simple_yaml_modules,
-    parse_synonym_yaml,
     read_kb_files,
 )
 
@@ -86,7 +85,7 @@ def detect_module_from_filename(filename: str) -> str:
 
 def import_capability(db: KngDatabase, capability_dir: pathlib.Path,
                       force: bool = False, verbose: bool = False) -> Dict[str, int]:
-    stats = {"skills": 0, "scenarios": 0, "synonyms": 0, "kb_entries": 0}
+    stats = {"skills": 0, "kb_entries": 0}
 
     registry_path = capability_dir / "skill-registry.yaml"
     if registry_path.exists():
@@ -101,34 +100,8 @@ def import_capability(db: KngDatabase, capability_dir: pathlib.Path,
                 output_spec=skill.get("output", ""),
             )
             stats["skills"] += 1
-        for scenario in registry.get("scenarios", []):
-            db.insert_scenario(
-                scenario.get("name", ""), scenario.get("description", ""),
-                scenario.get("required_skills", []),
-                scenario.get("extra_tags", []),
-                scenario.get("test_focus", []),
-            )
-            stats["scenarios"] += 1
         if verbose:
-            print(f"  skill-registry.yaml: {stats['skills']} skills, {stats['scenarios']} scenarios")
-
-    synonym_path = capability_dir / "synonym-aliases.yaml"
-    if synonym_path.exists():
-        syn_map = parse_synonym_yaml(synonym_path.read_text(encoding="utf-8"))
-        seen_groups: Dict[frozenset, str] = {}
-        for term, term_set in syn_map.items():
-            key = frozenset(term_set)
-            if key not in seen_groups:
-                group_name = f"group_{len(seen_groups)}"
-                for t in term_set:
-                    if t.isascii() and t.isalpha():
-                        group_name = t
-                        break
-                seen_groups[key] = group_name
-                db.upsert_synonym_group(group_name, list(term_set))
-                stats["synonyms"] += len(term_set)
-        if verbose:
-            print(f"  synonym-aliases.yaml: {len(seen_groups)} groups, {stats['synonyms']} terms")
+            print(f"  skill-registry.yaml: {stats['skills']} skills")
 
     cap_files = read_kb_files(capability_dir)
     for path, content in cap_files:

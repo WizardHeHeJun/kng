@@ -5,9 +5,6 @@ Scans capability/*.md for callable skills (identified by "可调用技能" or
 "## 触发条件" markers), extracts metadata from markdown sections, and
 writes skill-registry.yaml.
 
-Existing scenarios in skill-registry.yaml are preserved — only the skills
-section is regenerated.
-
 Usage:
     python generate_registry.py <capability_dir>
     python generate_registry.py /path/to/kb/capability --verbose
@@ -176,19 +173,6 @@ def parse_skill_file(filepath: pathlib.Path) -> Optional[Dict]:
     }
 
 
-def load_existing_scenarios(registry_path: pathlib.Path) -> str:
-    if not registry_path.exists():
-        return ""
-    content = registry_path.read_text(encoding="utf-8")
-    match = re.search(r"^(# 场景组合模板.*)", content, re.MULTILINE | re.DOTALL)
-    if match:
-        return match.group(1)
-    match = re.search(r"^(scenarios:.*)", content, re.MULTILINE | re.DOTALL)
-    if match:
-        return match.group(1)
-    return ""
-
-
 def yaml_escape(s: str) -> str:
     if not s:
         return '""'
@@ -208,7 +192,7 @@ def format_yaml_list(items: List[str]) -> str:
     return "\n" + lines
 
 
-def generate_yaml(skills: List[Dict], existing_scenarios: str) -> str:
+def generate_yaml(skills: List[Dict]) -> str:
     lines = [
         "# Skill Registry — 能力库可调用技能索引",
         "# 由 generate_registry.py 从 capability/*.md 自动生成",
@@ -230,15 +214,6 @@ def generate_yaml(skills: List[Dict], existing_scenarios: str) -> str:
         if i < len(skills) - 1:
             lines.append("")
 
-    lines.append("")
-
-    if existing_scenarios:
-        lines.append(existing_scenarios)
-    else:
-        lines.append("# 场景组合模板 — 描述常见测试场景需要哪些 skill 组合")
-        lines.append("# 由 /kng-evolve 在使用过程中逐步积累")
-        lines.append("scenarios: []")
-
     return "\n".join(lines) + "\n"
 
 
@@ -254,10 +229,7 @@ def scan_and_generate(capability_dir: pathlib.Path, verbose: bool = False) -> Tu
         elif verbose:
             print(f"  [skip]  {f.name}")
 
-    registry_path = capability_dir / "skill-registry.yaml"
-    existing_scenarios = load_existing_scenarios(registry_path)
-
-    yaml_content = generate_yaml(skills, existing_scenarios)
+    yaml_content = generate_yaml(skills)
     return skills, yaml_content
 
 

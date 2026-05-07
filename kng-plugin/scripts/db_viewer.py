@@ -275,8 +275,6 @@ _NAV_ITEMS = [
     ("/table/modules", "模块"),
     ("/table/kb_entries", "知识库"),
     ("/table/skills", "技能工具箱"),
-    ("/table/skill_scenarios", "场景"),
-    ("/table/synonyms", "同义词"),
     ("/table/test_designs", "测试设计"),
     ("/table/learning_feedback", "反馈"),
     ("/modules", "模块关联"),
@@ -288,8 +286,6 @@ _TABLE_LABELS = {
     "module_relations": "模块关联",
     "kb_entries": "知识条目",
     "skills": "技能",
-    "skill_scenarios": "场景模板",
-    "synonyms": "同义词",
     "test_designs": "测试设计",
     "learning_feedback": "学习反馈",
 }
@@ -462,7 +458,7 @@ def _kb_type_badge(kb_type: str) -> str:
 def page_dashboard(db: sqlite3.Connection) -> str:
     tables = [
         "projects", "modules", "module_relations", "kb_entries",
-        "skills", "skill_scenarios", "synonyms", "test_designs", "learning_feedback",
+        "skills", "test_designs", "learning_feedback",
     ]
     cards = []
     for t in tables:
@@ -756,7 +752,7 @@ def page_table(db: sqlite3.Connection, table: str, page: int = 1,
                per_page: int = 50, project: str = "", kb_type: str = "") -> str:
     allowed = {
         "projects", "modules", "module_relations", "kb_entries",
-        "skills", "skill_scenarios", "synonyms", "test_designs", "learning_feedback",
+        "skills", "test_designs", "learning_feedback",
     }
     if table not in allowed:
         return _layout("404", '<div class="empty">未找到该表</div>')
@@ -1291,8 +1287,7 @@ class KngViewerHandler(BaseHTTPRequestHandler):
             elif path == "/api/stats":
                 tables = [
                     "projects", "modules", "module_relations", "kb_entries",
-                    "skills", "skill_scenarios", "synonyms", "test_designs",
-                    "learning_feedback",
+                    "skills", "test_designs", "learning_feedback",
                 ]
                 stats = {}
                 for t in tables:

@@ -76,11 +76,6 @@ def _format_context(result: dict) -> str:
     if mod.get("id") and mod["id"] != "general":
         parts.append(f"**检测到模块**: {mod.get('name', mod['id'])} (置信度: {mod.get('score', 0):.1f})")
 
-    scenarios = result.get("matched_scenarios", [])
-    if scenarios:
-        names = ", ".join(s.get("name", "") for s in scenarios[:3])
-        parts.append(f"**匹配场景**: {names}")
-
     related = result.get("related_modules", [])
     if related:
         rels = ", ".join(f"{r['module_id']}({r['risk_level']})" for r in related[:3])

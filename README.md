@@ -188,8 +188,7 @@ python kng-plugin/scripts/retrieve_kb.py \
 | `modules` | 业务模块注册 |
 | `module_relations` | 模块间关联图谱（depends_on / feeds_into / shares_state / triggers） |
 | `kb_entries` + `kb_entries_fts` | 知识条目 + FTS5 全文索引 |
-| `skills` / `skill_scenarios` | 技能注册表 + 场景模板 |
-| `synonyms` | 同义词/别名组 |
+| `skills` | 技能注册表 |
 | `test_designs` | 测试设计产出追踪 |
 | `learning_feedback` | 学习反馈记录 |
 
@@ -222,7 +221,6 @@ python kng-plugin/scripts/retrieve_kb.py \
   kb/
     capability/                   # 能力库（用户自行维护，插件更新不影响）
       skill-registry.yaml         # 技能注册表（自动生成）
-      synonym-aliases.yaml        # 同义词配置
     projects/
       <project-id>/               # 项目知识库（按项目隔离）
 

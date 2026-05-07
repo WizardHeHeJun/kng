@@ -23,7 +23,7 @@ import sqlite3
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -125,24 +125,6 @@ CREATE TABLE IF NOT EXISTS skills (
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS skill_scenarios (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL,
-    description     TEXT DEFAULT '',
-    required_skills TEXT DEFAULT '[]',
-    extra_tags      TEXT DEFAULT '[]',
-    test_focus      TEXT DEFAULT '[]',
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS synonyms (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_name  TEXT NOT NULL,
-    term        TEXT NOT NULL,
-    UNIQUE (group_name, term)
-);
-
 CREATE TABLE IF NOT EXISTS test_designs (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -177,7 +159,6 @@ CREATE INDEX IF NOT EXISTS idx_kb_entries_module ON kb_entries(project_id, modul
 CREATE INDEX IF NOT EXISTS idx_kb_entries_type ON kb_entries(entry_type);
 CREATE INDEX IF NOT EXISTS idx_relations_from ON module_relations(project_id, from_module);
 CREATE INDEX IF NOT EXISTS idx_relations_to ON module_relations(project_id, to_module);
-CREATE INDEX IF NOT EXISTS idx_synonyms_term ON synonyms(term);
 CREATE INDEX IF NOT EXISTS idx_test_designs_project ON test_designs(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_feedback_project ON learning_feedback(project_id, created_at);
 """
@@ -243,6 +224,14 @@ class KngDatabase:
             cur.execute(
                 "INSERT INTO schema_version (version, description) VALUES (?, ?)",
                 (2, "add skill callable interface fields + skill entry_type"),
+            )
+        if from_version < 3:
+            cur.execute("DROP INDEX IF EXISTS idx_synonyms_term")
+            cur.execute("DROP TABLE IF EXISTS skill_scenarios")
+            cur.execute("DROP TABLE IF EXISTS synonyms")
+            cur.execute(
+                "INSERT INTO schema_version (version, description) VALUES (?, ?)",
+                (3, "drop skill_scenarios and synonyms tables"),
             )
 
     # ── Projects ──
@@ -630,78 +619,9 @@ class KngDatabase:
             result.append(d)
         return result
 
-    # ── Skill Scenarios ──
-
-    def insert_scenario(self, name: str, description: str = "",
-                        required_skills: List[str] = None,
-                        extra_tags: List[str] = None,
-                        test_focus: List[str] = None) -> int:
-        cur = self.conn.execute(
-            """INSERT INTO skill_scenarios (name, description, required_skills, extra_tags, test_focus)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, description,
-             json.dumps(required_skills or [], ensure_ascii=False),
-             json.dumps(extra_tags or [], ensure_ascii=False),
-             json.dumps(test_focus or [], ensure_ascii=False)),
-        )
-        self.conn.commit()
-        return cur.lastrowid
-
-    def list_scenarios(self) -> List[Dict]:
-        result = []
-        for r in self.conn.execute("SELECT * FROM skill_scenarios ORDER BY id"):
-            d = dict(r)
-            for k in ("required_skills", "extra_tags", "test_focus"):
-                d[k] = json.loads(d[k])
-            result.append(d)
-        return result
-
-    def match_scenarios(self, query_keywords: Set[str],
-                        original_keyword_count: int = 0
-                        ) -> Tuple[Dict[str, float], List[Dict[str, Any]]]:
+    def match_skill_boosts(self, query_keywords: Set[str]) -> Dict[str, float]:
         boosts: Dict[str, float] = {}
-        matched: List[Dict[str, Any]] = []
-        scenarios = self.list_scenarios()
-        skills_index = {s["id"]: s for s in self.list_skills()}
-
-        for scenario in scenarios:
-            scenario_tags = set(scenario.get("extra_tags", []))
-            scenario_tags.update(_extract_keywords(scenario.get("name", "")))
-            scenario_tags.update(_extract_keywords(scenario.get("description", "")))
-            for focus in scenario.get("test_focus", []):
-                scenario_tags.update(_extract_keywords(focus))
-
-            overlap = len(query_keywords & scenario_tags)
-            scenario_text = _normalize_text(
-                scenario.get("name", "") + " " +
-                scenario.get("description", "") + " " +
-                " ".join(scenario.get("extra_tags", [])) + " " +
-                " ".join(scenario.get("test_focus", []))
-            )
-            substr_hits = _substring_match_score(
-                query_keywords - scenario_tags, scenario_text
-            )
-            effective_overlap = overlap + substr_hits
-
-            kw_count = original_keyword_count if original_keyword_count > 0 else len(query_keywords)
-            min_overlap = max(1, min(2, kw_count // 2))
-            if effective_overlap < min_overlap:
-                continue
-
-            boost = effective_overlap * 3
-            for skill_id in scenario.get("required_skills", []):
-                skill = skills_index.get(skill_id, {})
-                skill_file = skill.get("file", "")
-                if skill_file:
-                    boosts[skill_file] = boosts.get(skill_file, 0) + boost
-
-            matched.append({
-                "name": scenario.get("name", ""),
-                "required_skills": scenario.get("required_skills", []),
-                "test_focus": scenario.get("test_focus", []),
-            })
-
-        for skill in skills_index.values():
+        for skill in self.list_skills():
             skill_tags = set(skill.get("tags", []))
             for cover in skill.get("covers", []):
                 skill_tags.update(_extract_keywords(cover))
@@ -710,41 +630,7 @@ class KngDatabase:
                 skill_file = skill.get("file", "")
                 if skill_file:
                     boosts[skill_file] = boosts.get(skill_file, 0) + overlap * 2
-
-        return boosts, matched
-
-    # ── Synonyms ──
-
-    def upsert_synonym_group(self, group_name: str, terms: List[str]) -> None:
-        self.conn.execute(
-            "DELETE FROM synonyms WHERE group_name=?", (group_name,)
-        )
-        for term in terms:
-            self.conn.execute(
-                "INSERT OR IGNORE INTO synonyms (group_name, term) VALUES (?, ?)",
-                (group_name, term),
-            )
-        self.conn.commit()
-
-    def load_synonym_map(self) -> Dict[str, Set[str]]:
-        rows = self.conn.execute("SELECT group_name, term FROM synonyms").fetchall()
-        groups: Dict[str, List[str]] = {}
-        for r in rows:
-            groups.setdefault(r["group_name"], []).append(r["term"])
-        synonym_map: Dict[str, Set[str]] = {}
-        for terms in groups.values():
-            term_set = set(terms)
-            for t in terms:
-                synonym_map[t] = term_set
-        return synonym_map
-
-    def expand_keywords(self, keywords: Set[str]) -> Set[str]:
-        synonym_map = self.load_synonym_map()
-        expanded = set(keywords)
-        for kw in keywords:
-            if kw in synonym_map:
-                expanded |= synonym_map[kw]
-        return expanded
+        return boosts
 
     # ── Test Designs ──
 
@@ -828,8 +714,7 @@ class KngDatabase:
     def get_stats(self) -> Dict[str, Any]:
         counts = {}
         for table in ("projects", "modules", "module_relations", "kb_entries",
-                       "skills", "skill_scenarios", "synonyms",
-                       "test_designs", "learning_feedback"):
+                       "skills", "test_designs", "learning_feedback"):
             row = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             counts[table] = row[0]
 
