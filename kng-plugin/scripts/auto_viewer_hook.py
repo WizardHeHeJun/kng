@@ -157,6 +157,74 @@ def _purge_stale(db_path: str) -> int:
         return 0
 
 
+DEFAULT_PENDING_THRESHOLD = 8
+SESSION_FILE_MAX_AGE_DAYS = 7
+
+
+def _pending_count(kng_home: pathlib.Path) -> int:
+    p = kng_home / "cache" / "pending-feedback.jsonl"
+    if not p.exists():
+        return 0
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip())
+    except OSError:
+        return 0
+
+
+def _session_already_declined(kng_home: pathlib.Path, session_id: str) -> bool:
+    flag = kng_home / "cache" / f"session-{session_id}.flag"
+    if not flag.exists():
+        return False
+    try:
+        return "evolve-declined" in flag.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def _check_pending_feedback(
+    kng_home: pathlib.Path, session_id: str, config: dict
+) -> Optional[str]:
+    auto_cfg = config.get("auto_evolve", {})
+    if auto_cfg.get("enabled") is False:
+        return None
+    threshold = int(auto_cfg.get("pending_threshold", DEFAULT_PENDING_THRESHOLD))
+
+    count = _pending_count(kng_home)
+    if count < threshold:
+        return None
+    if _session_already_declined(kng_home, session_id):
+        return None
+
+    flag_path = kng_home / "cache" / f"session-{session_id}.flag"
+    return (
+        f"📝 KNG 自动学习：累积了 {count} 条待审核反馈（≥ 阈值 {threshold}）。\n"
+        "请在响应用户首次消息时主动询问：\"要先一起做一次 /kng-evolve 归并吗？\"\n"
+        "如果用户拒绝（如\"先不弄\"、\"待会儿\"等），请用 Bash 往 "
+        f"`{flag_path}` 写入字符串 \"evolve-declined\"，本会话内不再提示。\n"
+        "如果用户同意，直接调用 /kng-evolve（无参数即可，会自动加载 pending 队列）。"
+    )
+
+
+def _purge_stale_session_files(kng_home: pathlib.Path) -> int:
+    """Delete transcript-*.jsonl and session-*.flag files older than
+    SESSION_FILE_MAX_AGE_DAYS. Returns count removed."""
+    cache = kng_home / "cache"
+    if not cache.exists():
+        return 0
+    cutoff = time.time() - SESSION_FILE_MAX_AGE_DAYS * 86400
+    removed = 0
+    for pattern in ("transcript-*.jsonl", "session-*.flag"):
+        for p in cache.glob(pattern):
+            try:
+                if p.stat().st_mtime < cutoff:
+                    p.unlink()
+                    removed += 1
+            except OSError:
+                pass
+    return removed
+
+
 def _dedupe_entries(db_path: str) -> int:
     try:
         from db import KngDatabase
@@ -203,26 +271,37 @@ def _ensure_viewer(db_path: str, current_version: str) -> Optional[str]:
 
 
 def main():
+    session_id = "no-session"
+    try:
+        input_data = json.load(sys.stdin)
+        session_id = input_data.get("session_id") or session_id
+    except (json.JSONDecodeError, EOFError, ValueError):
+        pass
+
     kng_home = _resolve_kng_home()
     config = _load_config(kng_home)
 
-    db_path = config.get("db_path", "")
-    if not db_path or not pathlib.Path(db_path).exists():
-        sys.exit(0)
-
-    removed = _purge_stale(db_path)
-    deduped = _dedupe_entries(db_path)
-    current_version = _current_plugin_version()
-
     context_parts = []
-    if removed > 0:
-        context_parts.append(f"已自动清理 {removed} 条过期知识库条目（源文件已删除）")
-    if deduped > 0:
-        context_parts.append(f"已自动合并 {deduped} 条重复知识库条目（同一 source_file 多份副本）")
 
-    msg = _ensure_viewer(db_path, current_version)
-    if msg:
-        context_parts.append(msg)
+    _purge_stale_session_files(kng_home)
+    pending_msg = _check_pending_feedback(kng_home, session_id, config)
+    if pending_msg:
+        context_parts.append(pending_msg)
+
+    db_path = config.get("db_path", "")
+    if db_path and pathlib.Path(db_path).exists():
+        removed = _purge_stale(db_path)
+        deduped = _dedupe_entries(db_path)
+        current_version = _current_plugin_version()
+
+        if removed > 0:
+            context_parts.append(f"已自动清理 {removed} 条过期知识库条目（源文件已删除）")
+        if deduped > 0:
+            context_parts.append(f"已自动合并 {deduped} 条重复知识库条目（同一 source_file 多份副本）")
+
+        msg = _ensure_viewer(db_path, current_version)
+        if msg:
+            context_parts.append(msg)
 
     if context_parts:
         output = {
@@ -231,7 +310,9 @@ def main():
                 "additionalContext": "\n".join(context_parts),
             }
         }
-        print(json.dumps(output, ensure_ascii=False))
+        sys.stdout.buffer.write(
+            (json.dumps(output, ensure_ascii=False) + "\n").encode("utf-8")
+        )
     sys.exit(0)
 
 
