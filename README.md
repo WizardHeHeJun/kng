@@ -163,7 +163,7 @@ python kng-plugin/scripts/db_viewer.py --db ~/.kng-plugin/kng.db
 
 ### 自动清理
 
-SessionStart hook 在每次会话启动时扫描 DB 中的知识条目，源文件已被删除的会自动从 DB 中清除，保证文件系统与 DB 保持一致，避免历史残留。
+SessionStart hook 在每次会话启动时扫描 DB 中的知识条目，源文件已被删除的会自动从 DB 中清除，保证文件系统与 DB 保持一致，避免历史残留。同时清理 `${KNG_HOME}/cache/` 下超过 7 天的 transcript/session flag 文件（自动学习链路产生）。
 
 ### 知识检索
 
@@ -192,7 +192,54 @@ python kng-plugin/scripts/retrieve_kb.py \
 | `test_designs` | 测试设计产出追踪 |
 | `learning_feedback` | 学习反馈记录 |
 
-## 7. 配置文件
+## 7. 自动学习
+
+KNG 通过 Claude Code hook 在对话过程中自动收集反馈，无需手动跑命令也能持续沉淀经验。
+
+### 工作原理
+
+```
+对话进行中（每轮 user prompt）
+   │
+   ▼  auto_evolve_hook 累积 transcript
+满 N 轮（默认 5）
+   │
+   ▼  注入指令给主助手
+主助手启动 extractor subagent（独立上下文）
+   │
+   ▼  抽取 4 类候选：correction / missed / constraint / confirmation
+写入 ${KNG_HOME}/cache/pending-feedback.jsonl
+   │
+   │  pending ≥ 阈值（默认 8）
+   ▼  SessionStart hook 注入邀请指令
+主助手主动询问用户是否做一次 /kng-evolve 归并
+   │
+   ▼
+/kng-evolve 审核候选 → 落入 KB
+```
+
+### 两条不变量
+
+1. **KB 永远不被自动写**：hook 只往 pending 队列追加候选；只有用户在 `/kng-evolve` 审核后才落 KB
+2. **主对话上下文不被污染**：候选抽取由独立 subagent 完成，主助手只承担 1 次 Agent 工具调用的开销（约 200 token），不把最近 N 轮对话内容拉进自己的工作上下文
+
+### 配置或关闭
+
+在 `~/.kng-plugin/kng.config.json` 顶层加 `auto_evolve` 块（不写默认开启，阈值 5/8）：
+
+```json
+{
+  "auto_evolve": {
+    "enabled": true,
+    "turn_threshold": 5,
+    "pending_threshold": 8
+  }
+}
+```
+
+设 `"enabled": false` 完全关闭自动学习链路。同会话里用户拒绝邀请后，本会话内不再提示（写入 `cache/session-{id}.flag`），新会话仍会提示。
+
+## 8. 配置文件
 
 `~/.kng-plugin/kng.config.json`：
 
@@ -201,7 +248,12 @@ python kng-plugin/scripts/retrieve_kb.py \
   "active_project": "my-project",
   "kb_root": "~/.kng-plugin/kb",
   "output_dir": "./test-output",
-  "db_path": "~/.kng-plugin/kng.db"
+  "db_path": "~/.kng-plugin/kng.db",
+  "auto_evolve": {
+    "enabled": true,
+    "turn_threshold": 5,
+    "pending_threshold": 8
+  }
 }
 ```
 
@@ -209,10 +261,11 @@ python kng-plugin/scripts/retrieve_kb.py \
 - `kb_root`：知识库根目录（默认 `~/.kng-plugin/kb`）
 - `output_dir`：产出输出目录（相对于当前工作目录）
 - `db_path`：默认启用，指向 SQLite 数据库路径；删除该字段可退回纯文件模式
+- `auto_evolve`：自动学习链路开关与阈值（详见 §7），不写默认开启 5/8
 
 可通过 `KNG_HOME` 环境变量自定义数据目录位置（默认 `~/.kng-plugin`）。
 
-## 8. 项目结构
+## 9. 项目结构
 
 ```text
 ~/.kng-plugin/                    # 用户数据目录 (KNG_HOME)
@@ -243,7 +296,7 @@ bin/
   cli.js                          # 安装/卸载 CLI 入口
 ```
 
-## 9. 知识闭环
+## 10. 知识闭环
 
 ```
 能力库 + 项目库 → AI 产出 → 实际验证 → /kng-evolve → 知识库更新 → 下次更准确
@@ -252,8 +305,8 @@ bin/
 1. 通过 `/kng-kb import` 导入飞书文档、`/kng-code import` 导入本地代码，持续积累项目知识
 2. 通过 `/kng-code link` 将策划案与实现代码互链，形成完整的设计-实现知识对
 3. AI 基于双知识库上下文完成任务，产出结构化结果
-4. 实际执行中发现遗漏或新问题
-5. `/kng-evolve` 回顾产出，反馈智能路由到对应知识文件
+4. 实际执行中发现遗漏或新问题——hook 自动收集候选反馈到 pending 队列（§7）
+5. 累积到阈值后助手主动邀请，或用户随时跑 `/kng-evolve` 审核归并
 6. 知识库自动更新，下次任务时自动受益 — 越用越准
 
 ## License
