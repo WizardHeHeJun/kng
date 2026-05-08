@@ -48,6 +48,11 @@ function scaffoldKngHome() {
       kb_root: path.join(kngHome, "kb").replace(/\\/g, "/"),
       output_dir: "./test-output",
       db_path: path.join(kngHome, "kng.db").replace(/\\/g, "/"),
+      auto_retrieve: {
+        enabled: true,
+        mode: "hint",
+        fallback: "use_global_active",
+      },
     };
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
     success(`Created config: ${configPath}`);
@@ -639,6 +644,104 @@ function skillCommand(args) {
   }
 }
 
+// ── Project Linking ──
+
+function ensureGitignoreEntry(targetDir, entry) {
+  const gitignorePath = path.join(targetDir, ".gitignore");
+  if (!fs.existsSync(gitignorePath)) return null;
+
+  const current = fs.readFileSync(gitignorePath, "utf-8");
+  const norm = (s) => s.replace(/^\/+/, "").trim();
+  const already = current.split(/\r?\n/).some((l) => norm(l) === entry);
+  if (already) return "exists";
+
+  const sep = current.length === 0 || current.endsWith("\n") ? "" : "\n";
+  fs.appendFileSync(gitignorePath, `${sep}${entry}\n`);
+  return "added";
+}
+
+function linkProject(args) {
+  const flags = new Set(args.filter((a) => a.startsWith("--")));
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const noGitignore = flags.has("--no-gitignore");
+
+  if (positional.length === 0) {
+    error("No project ID specified.");
+    console.log(`  Usage: kng-plugin link <project-id> [path] [--no-gitignore]`);
+    process.exit(1);
+  }
+  const projectId = positional[0];
+  const targetDir = positional[1] ? path.resolve(positional[1]) : process.cwd();
+
+  if (!fs.existsSync(targetDir)) {
+    error(`Directory does not exist: ${targetDir}`);
+    process.exit(1);
+  }
+  if (!fs.statSync(targetDir).isDirectory()) {
+    error(`Not a directory: ${targetDir}`);
+    process.exit(1);
+  }
+
+  const markerPath = path.join(targetDir, "kng.project");
+  fs.writeFileSync(
+    markerPath,
+    JSON.stringify({ project: projectId }, null, 2) + "\n"
+  );
+  success(`Linked: ${markerPath}`);
+  console.log(`  Project: ${CYAN}${projectId}${RESET}`);
+  console.log(`  This directory and its subdirectories now auto-retrieve from "${projectId}".`);
+
+  if (!noGitignore) {
+    const result = ensureGitignoreEntry(targetDir, "kng.project");
+    if (result === "added") {
+      success(`Added "kng.project" to .gitignore (won't be committed).`);
+    } else if (result === "exists") {
+      log(`.gitignore already lists "kng.project" — left as is.`);
+    }
+    // result === null → no .gitignore in this dir, silent skip
+  }
+  console.log("");
+}
+
+function unlinkProject(args) {
+  const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
+  const markerPath = path.join(targetDir, "kng.project");
+
+  if (!fs.existsSync(markerPath)) {
+    warn(`No kng.project marker at: ${targetDir}`);
+    return;
+  }
+  fs.unlinkSync(markerPath);
+  success(`Unlinked: ${markerPath}`);
+}
+
+function whichProject() {
+  let cur = process.cwd();
+  while (true) {
+    const marker = path.join(cur, "kng.project");
+    if (fs.existsSync(marker)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(marker, "utf-8"));
+        console.log(`${CYAN}Project:${RESET} ${data.project}`);
+        console.log(`${CYAN}Marker:${RESET}  ${marker}`);
+        return;
+      } catch (e) {
+        warn(`Marker exists but failed to parse: ${marker}`);
+        return;
+      }
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  console.log(`No kng.project marker found in current directory or any ancestor.`);
+  if (process.env.KNG_PROJECT) {
+    console.log(`Falls back to KNG_PROJECT env: ${CYAN}${process.env.KNG_PROJECT}${RESET}`);
+  } else {
+    console.log(`(set KNG_PROJECT env or run: ${CYAN}kng-plugin link <project-id>${RESET})`);
+  }
+}
+
 // ── Help ──
 
 function showHelp() {
@@ -649,6 +752,13 @@ Usage:
   kng-plugin install                   Install the plugin into Claude Code
   kng-plugin update                    Update marketplace via git pull (no EPERM)
   kng-plugin uninstall                 Remove the plugin from Claude Code
+
+  kng-plugin link <project> [dir]      Link directory to a KB project (writes kng.project,
+                                         appends to .gitignore if present;
+                                         pass --no-gitignore to skip)
+  kng-plugin unlink [dir]              Remove the kng.project marker
+  kng-plugin which                     Show which project the current dir links to
+
   kng-plugin skill list                List installed capability skills
   kng-plugin skill install <url>       Install skill from URL
   kng-plugin skill install <file.md>   Install skill from local file
@@ -656,6 +766,8 @@ Usage:
   kng-plugin help                      Show this help message
 
 Data directory: ~/.kng-plugin/ (override with KNG_HOME env var)
+Project linking: hook walks up from cwd to find kng.project; only directories
+  with a marker (or KNG_PROJECT env set) trigger auto-retrieval.
 `);
 }
 
@@ -674,6 +786,15 @@ switch (command) {
     break;
   case "skill":
     skillCommand(process.argv.slice(3));
+    break;
+  case "link":
+    linkProject(process.argv.slice(3));
+    break;
+  case "unlink":
+    unlinkProject(process.argv.slice(3));
+    break;
+  case "which":
+    whichProject();
     break;
   case "help":
   case "--help":

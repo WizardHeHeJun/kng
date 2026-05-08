@@ -74,6 +74,24 @@ If the config already exists, only update the `active_project` field using Edit 
 
 If there is a legacy `default_project` field, keep it in sync (set it to the same value).
 
+## Step 4a: Update Current Directory Marker
+
+Update or write `${CWD}/kng.project` so the `auto_retrieve_hook` recognizes this directory as belonging to the newly selected project. The marker takes precedence over global `active_project`, so this ensures the user's current working directory immediately reflects the selection.
+
+1. Determine CWD.
+2. Check `${CWD}/kng.project`:
+   - If exists with `project` = selected project → skip, no change needed.
+   - If exists with a different project → since the user explicitly invoked `/kng-select`, default to overwriting; **inform** the user: "已将当前目录 marker 从 `{old}` 改为 `{new}`" — but if `{old}` looks intentional (e.g. matches a real directory above), confirm first.
+   - If not exists → write a new one.
+3. **Write** `${CWD}/kng.project`:
+   ```json
+   {
+     "project": "<selected-project-id>"
+   }
+   ```
+4. If `${CWD}/.gitignore` exists and doesn't already contain `kng.project`, **Edit** to append `kng.project\n`.
+5. If `${CWD}/.gitignore` does not exist, do NOT create one.
+
 ## Step 5: Report
 
 Display:
@@ -84,7 +102,9 @@ Display:
 📂 项目路径: {KB_ROOT}/projects/{project-id}/
 📦 已注册模块: {module_count} 个
 📄 知识库文件: {file_count} 个
+📌 当前目录 marker: {CWD}/kng.project → {project-id}
 
 后续 /kng-kb、/kng-evolve 将默认使用此项目。
+当前目录及其子目录的对话也会自动检索此项目知识库。
 如需切换，使用 /kng-select <其他项目> 或 /kng-select --list 查看所有项目。
 ```

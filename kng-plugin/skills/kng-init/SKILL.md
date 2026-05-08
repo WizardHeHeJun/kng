@@ -300,12 +300,34 @@ Initialize the SQLite database and import all flat KB files into it. This enable
 
 If any step fails, warn the user but do NOT block the init — the flat files are always the source of truth and file mode will still work.
 
+## Step 7c: Link Current Directory (Auto-Retrieval Activation)
+
+Write a `kng.project` marker so the `auto_retrieve_hook` recognizes this directory and activates KB lookup for `${PROJECT_ID}`. Without this marker, the hook stays silent in this directory (which is the correct default — prevents cross-project leakage).
+
+1. Determine CWD (the directory the user invoked Claude Code in).
+2. Check `${CWD}/kng.project`:
+   - If exists with `project` = `${PROJECT_ID}` → skip, already linked.
+   - If exists with a different project → ASK user: "当前目录已链接到 `{existing}`，改为 `${PROJECT_ID}` 吗？(Y/n)" — only overwrite on yes.
+   - If not exists → proceed to step 3.
+3. **Write** `${CWD}/kng.project` with:
+   ```json
+   {
+     "project": "${PROJECT_ID}"
+   }
+   ```
+4. If `${CWD}/.gitignore` exists, **Read** it. If it does NOT already contain a line equal to `kng.project` (after stripping leading slashes and whitespace), **Edit** to append `kng.project\n` at the end (with proper newline handling so we don't concatenate with the previous line).
+5. If `${CWD}/.gitignore` does not exist, do NOT create one — leave it to the user.
+
+This means future Claude Code sessions in this directory (and any subdirectory) auto-retrieve from `${PROJECT_ID}` without further setup.
+
 ## Step 8: Report
 
 Print a summary:
 - Created directory path
 - List of files generated
 - Database status: initialized at `${DB_PATH}`, number of imported entries
+- Marker status: `📌 已在 ${CWD}/kng.project 写入项目链接 (KB 自动检索已激活)`
+  - If skipped because already linked: `📌 当前目录已链接到 ${PROJECT_ID}, 跳过 marker 写入`
 - **If document-driven mode**: show discovered modules and relations:
   ```
   发现 {N} 个业务模块：
