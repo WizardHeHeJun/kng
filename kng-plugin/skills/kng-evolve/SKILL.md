@@ -13,6 +13,8 @@ This skill closes the learning loop: review the latest output (whatever the user
 
 This skill is **domain-neutral**. Specific naming conventions for module files (e.g. `*-bug-patterns.md`, `*-overview.md`) are defined by each capability library's templates, not hardcoded here.
 
+**Execution pattern**: Steps 0–2 (project resolution + guided review) run in the main conversation because they need user dialogue. Steps 3–8 (registry loading, routing, edits, DB sync, queue cleanup) are **delegated to a general-purpose subagent by default** — see Step 2.5. This keeps the main conversation lean even though the underlying work touches many KB files.
+
 ## Step 0: Resolve Project Context
 
 Before gathering context, resolve the active project knowledge base.
@@ -126,6 +128,45 @@ Present the output summary (if available) and ask the user focused questions. St
 If project memory already surfaced relevant learnings, present them too: "根据之前的记录，这些问题已被识别过：[...]. 是否有新的补充？"
 
 Don't ask all questions at once. Ask one, respond to the answer, then decide if follow-ups are needed.
+
+## Step 2.5: Delegate Execution to Subagent (default)
+
+Once Step 2 has captured the user's accepted feedbacks (and decisions on which pending candidates to keep / drop), **dispatch the rest of the flow to a `general-purpose` subagent via the Agent tool**. The main conversation only retains the brief Step 0–2 dialogue and the subagent's final summary; all KB reads, routing analysis, edits, and DB sync happen inside the subagent's isolated context window.
+
+### Skip subagent (rare)
+
+Stay inline only when one of these holds:
+- User explicitly said "do it inline" / "don't use subagent" this turn
+- Pending queue is empty AND user contributed exactly one trivial single-line feedback (delegation overhead isn't worth it)
+- You're actively debugging the skill itself and need to see every step in the main thread
+
+### Subagent prompt template
+
+Pass the subagent (in its single prompt):
+
+1. **Project context**: resolved values for `KNG_HOME`, `KB_ROOT`, `CAPABILITY_DIR`, `DB_PATH` (or "file mode"), `PROJECT_ID`, storage mode (file/DB).
+2. **Accepted feedbacks**: list of `{type, content}` items the user confirmed in Step 2. Include refined wordings (not the raw pending text) when the user revised a candidate.
+3. **Pending candidate disposition**: explicit list of pending IDs/timestamps the user **accepted** vs **rejected** vs **deferred** ("skip for now"). Subagent must respect this exactly when clearing the queue.
+4. **Memory pointers**: any `${PROJECT_ROOT}/.claude/MEMORY.md` entries surfaced in Step 1b that are relevant to this evolve round (so subagent doesn't re-write known constraints).
+5. **Instruction load**: tell the subagent to **Read this SKILL.md** at its installed path (don't inline-copy Steps 1c–8 into the prompt) and execute Steps 1c, 1d, 3, 4, 5, 6, 8-Phase-2 in order.
+6. **Required return format**: ≤300-word report containing:
+   - Files changed (full paths) + per-file diff (≤15 lines each)
+   - DB sync result (rows inserted / updated, or "skipped — file mode")
+   - Pending queue final state (which IDs cleared, which kept, byte size after)
+   - Any decision the subagent flagged for user review (ambiguous routing, new module discovery, conflicting edits)
+
+### Hard rule: don't trash the pending queue
+
+Subagent **must Read `${KNG_HOME}/cache/pending-feedback.jsonl` first**, then clear **only** the IDs listed under "accepted" or "rejected" in the prompt. Any line whose timestamp/session is not in the disposition list is an unrelated independent feedback and **must be preserved**. Past incident: a subagent once truncated 5 unrelated entries because the main agent assumed the queue contained only this round's items.
+
+### After subagent returns
+
+Main agent:
+1. Surface the summary verbatim (or briefly condensed) to the user
+2. If subagent flagged decisions for user review, present them as follow-ups now
+3. Do **not** re-Read or re-validate the changed files — trust the diff. User can `git revert` if anything looks wrong.
+
+The remaining steps below are written for the subagent (or for inline execution in skip-cases).
 
 ## Step 3: Route Feedback to Target Files
 
@@ -244,7 +285,9 @@ Show the user a summary of ALL proposed changes (example below uses test/QA doma
    + modules: 新增 pet 宠物系统 (仅当发现新模块时)
 ```
 
-Ask for confirmation. Then apply using Edit tool — append to existing sections, never overwrite.
+**In subagent mode (default)**: apply directly via Edit tool — append to existing sections, never overwrite. Include the full change list in the return report so the user can review post-hoc and `git revert` if needed.
+
+**In inline mode (skip-cases only)**: show the user the change summary first, ask for confirmation, then apply.
 
 ### DB mode: persist feedback & sync
 
