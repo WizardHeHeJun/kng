@@ -61,6 +61,7 @@ def _write_state(state_path: pathlib.Path, state: dict) -> None:
         state_path.write_text(
             json.dumps(state, ensure_ascii=False, indent=2),
             encoding="utf-8",
+            errors="replace",
         )
     except OSError:
         pass
@@ -79,14 +80,20 @@ def _append_transcript(transcript_path: pathlib.Path, prompt: str) -> None:
     existing = []
     if transcript_path.exists():
         try:
-            existing = transcript_path.read_text(encoding="utf-8").splitlines()
+            existing = transcript_path.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()
         except OSError:
             existing = []
     existing.append(line)
     if len(existing) > TRANSCRIPT_MAX_LINES:
         existing = existing[-TRANSCRIPT_MAX_LINES:]
     try:
-        transcript_path.write_text("\n".join(existing) + "\n", encoding="utf-8")
+        transcript_path.write_text(
+            "\n".join(existing) + "\n",
+            encoding="utf-8",
+            errors="replace",
+        )
     except OSError:
         pass
 
@@ -120,8 +127,9 @@ def _build_directive(kng_home: pathlib.Path, transcript_path: pathlib.Path) -> s
 
 def main():
     try:
-        input_data = json.load(sys.stdin)
-    except (json.JSONDecodeError, EOFError):
+        raw = sys.stdin.buffer.read()
+        input_data = json.loads(raw.decode("utf-8", errors="replace"))
+    except (json.JSONDecodeError, OSError, ValueError):
         sys.exit(0)
 
     prompt = input_data.get("prompt", "").strip()
